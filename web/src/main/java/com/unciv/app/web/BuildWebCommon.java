@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import org.teavm.vm.TeaVMOptimizationLevel;
 
 final class BuildWebCommon {
@@ -27,6 +28,7 @@ final class BuildWebCommon {
         Path resourcesPath = repoRoot.resolve("web/build/resources/main");
 
         cleanupOutput(outputPath);
+        ensureDirectory(outputPath);
         ensureDirectory(resourcesPath);
 
         WebBackend backend = new WebBackend()
@@ -53,6 +55,7 @@ final class BuildWebCommon {
         builder.build(outputPath.toFile());
         flattenWebapp(webappPath, outputPath);
         ensureStartupLogo(assetsPath, outputPath);
+        sanitizeAtlasFiltersForWeb(outputPath.resolve("assets"));
     }
 
     private static void ensureDirectory(Path path) {
@@ -100,6 +103,35 @@ final class BuildWebCommon {
             Files.copy(source, target);
         } catch (IOException e) {
             throw new RuntimeException("Failed creating web startup logo", e);
+        }
+    }
+
+    /**
+     * TeaVM/WebGL currently logs GL_INVALID_ENUM for mipmap filter tokens from atlas headers.
+     * Rewrite copied atlas files for web output only to avoid noisy warnings.
+     */
+    private static void sanitizeAtlasFiltersForWeb(Path assetsPath) {
+        if (!Files.isDirectory(assetsPath)) return;
+        try {
+            Files.walk(assetsPath)
+                    .filter(path -> Files.isRegularFile(path) && path.toString().toLowerCase(Locale.ROOT).endsWith(".atlas"))
+                    .forEach(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            String sanitized = content
+                                    .replace("MipMapLinearLinear", "Linear")
+                                    .replace("MipMapLinearNearest", "Linear")
+                                    .replace("MipMapNearestLinear", "Nearest")
+                                    .replace("MipMapNearestNearest", "Nearest");
+                            if (!sanitized.equals(content)) {
+                                Files.writeString(path, sanitized);
+                            }
+                        } catch (IOException e) {
+                            throw new RuntimeException("Failed sanitizing atlas filters for " + path, e);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException("Failed scanning atlas files in " + assetsPath, e);
         }
     }
 
