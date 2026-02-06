@@ -6,6 +6,7 @@ import com.unciv.logic.GameInfo
 import com.unciv.logic.GameStarter
 import com.unciv.logic.automation.Timers
 import com.unciv.models.metadata.GameSetupInfo
+import com.unciv.utils.Dispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
@@ -96,7 +97,7 @@ class Simulation(
 
         Timers.singleton.startTiming()
         val jobs = (1..threadsNumber).map { threadId ->
-            launch(Dispatchers.Default + CoroutineName("simulation-$threadId")) {
+            launch(Dispatcher.DAEMON + CoroutineName("simulation-$threadId")) {
                 repeat(simulationsPerThread) {
                     val step = SimulationStep(newGameInfo, statTurns)
                     val gameSetupInfo = GameSetupInfo(newGameInfo)

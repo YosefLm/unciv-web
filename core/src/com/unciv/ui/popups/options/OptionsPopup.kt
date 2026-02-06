@@ -1,6 +1,12 @@
 package com.unciv.ui.popups.options
 
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.unciv.GUI
+import com.unciv.models.metadata.BaseRuleset
+import com.unciv.platform.PlatformCapabilities
+import com.unciv.models.ruleset.RulesetCache
+import com.unciv.ui.components.extensions.areSecretKeysPressed
 import com.unciv.ui.components.extensions.center
 import com.unciv.ui.components.extensions.getCloseButton
 import com.unciv.ui.components.widgets.TabbedPager
