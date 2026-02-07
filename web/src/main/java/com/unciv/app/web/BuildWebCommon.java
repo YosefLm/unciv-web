@@ -56,6 +56,8 @@ final class BuildWebCommon {
         flattenWebapp(webappPath, outputPath);
         ensureStartupLogo(assetsPath, outputPath);
         sanitizeAtlasFiltersForWeb(outputPath.resolve("assets"));
+        if (!wasm) hardenIndexBootstrap(outputPath.resolve("index.html"));
+        ensureFavicon(outputPath);
     }
 
     private static void ensureDirectory(Path path) {
@@ -149,6 +151,46 @@ final class BuildWebCommon {
                     });
         } catch (IOException e) {
             throw new RuntimeException("Failed deleting path " + path, e);
+        }
+    }
+
+    private static void ensureFavicon(Path outputPath) {
+        Path faviconPath = outputPath.resolve("favicon.ico");
+        if (Files.exists(faviconPath)) return;
+        try {
+            Files.write(faviconPath, new byte[] {0});
+        } catch (IOException e) {
+            throw new RuntimeException("Failed creating favicon at " + faviconPath, e);
+        }
+    }
+
+    private static void hardenIndexBootstrap(Path indexPath) {
+        if (!Files.isRegularFile(indexPath)) return;
+        try {
+            String content = Files.readString(indexPath);
+            String legacy = "<script>\n"
+                    + "            async function start() {\n"
+                    + "                main()\n"
+                    + "            }\n"
+                    + "            window.addEventListener(\"load\", start);\n"
+                    + "        </script>";
+            String hardened = "<script>\n"
+                    + "            (function () {\n"
+                    + "                function boot() {\n"
+                    + "                    if (window.__uncivBootStarted) return;\n"
+                    + "                    if (typeof window.main !== 'function') { setTimeout(boot, 25); return; }\n"
+                    + "                    window.__uncivBootStarted = true;\n"
+                    + "                    window.main();\n"
+                    + "                }\n"
+                    + "                if (document.readyState === 'complete') setTimeout(boot, 0);\n"
+                    + "                else window.addEventListener('load', boot, { once: true });\n"
+                    + "            })();\n"
+                    + "        </script>";
+            if (content.contains(legacy)) content = content.replace(legacy, hardened);
+            else if (!content.contains("__uncivBootStarted")) content = content.replace("</body>", hardened + "\n    </body>");
+            Files.writeString(indexPath, content);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed hardening index bootstrap at " + indexPath, e);
         }
     }
 }
