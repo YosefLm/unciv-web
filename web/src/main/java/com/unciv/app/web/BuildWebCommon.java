@@ -2,6 +2,7 @@ package com.unciv.app.web;
 
 import com.github.xpenatan.gdx.teavm.backends.shared.config.AssetFileHandle;
 import com.github.xpenatan.gdx.teavm.backends.shared.config.builder.TeaBuilder;
+import com.github.xpenatan.gdx.teavm.backends.shared.config.plugin.TeaReflectionSupplier;
 import com.github.xpenatan.gdx.teavm.backends.web.config.backend.WebBackend;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -15,7 +16,79 @@ import org.teavm.vm.TeaVMOptimizationLevel;
 
 final class BuildWebCommon {
     private static final String OUTPUT_NAME = "unciv";
-    private static final List<String> REFLECTION_PREFIXES = List.of("com.badlogic.gdx.scenes.scene2d");
+    private static final List<String> PRESERVED_CLASSES = List.of(
+            "com.badlogic.gdx.scenes.scene2d.ui.Skin",
+            "com.unciv.models.stats.NamedStats",
+            "com.unciv.models.ruleset.ModOptions",
+            "com.unciv.models.ruleset.TechColumn",
+            "com.unciv.models.ruleset.tech.Technology",
+            "com.unciv.models.ruleset.Building",
+            "com.unciv.models.ruleset.tile.Terrain",
+            "com.unciv.models.ruleset.tile.TileResource",
+            "com.unciv.models.ruleset.tile.TileImprovement",
+            "com.unciv.models.ruleset.tech.Era",
+            "com.unciv.models.ruleset.Speed",
+            "com.unciv.models.ruleset.unit.UnitType",
+            "com.unciv.models.ruleset.unit.BaseUnit",
+            "com.unciv.models.ruleset.unit.Promotion",
+            "com.unciv.models.ruleset.unit.UnitNameGroup",
+            "com.unciv.models.ruleset.Quest",
+            "com.unciv.models.ruleset.Specialist",
+            "com.unciv.models.ruleset.PolicyBranch",
+            "com.unciv.models.ruleset.Policy",
+            "com.unciv.models.ruleset.Belief",
+            "com.unciv.models.ruleset.RuinReward",
+            "com.unciv.models.ruleset.nation.Nation",
+            "com.unciv.models.ruleset.nation.Difficulty",
+            "com.unciv.models.ruleset.GlobalUniques",
+            "com.unciv.models.ruleset.Victory",
+            "com.unciv.models.ruleset.nation.CityStateType",
+            "com.unciv.models.ruleset.nation.Personality",
+            "com.unciv.models.ruleset.Event",
+            "com.unciv.models.ruleset.EventChoice",
+            "com.unciv.models.ruleset.Tutorial",
+            "com.unciv.logic.GameInfo",
+            "com.unciv.logic.VictoryData",
+            "com.unciv.logic.map.TileMap",
+            "com.unciv.logic.map.tile.Tile",
+            "com.unciv.logic.map.mapunit.MapUnit",
+            "com.unciv.logic.map.mapunit.MapUnit$UnitMovementMemory",
+            "com.unciv.logic.map.mapunit.UnitPromotions",
+            "com.unciv.logic.city.City",
+            "com.unciv.logic.city.CityConstructions",
+            "com.unciv.logic.civilization.Civilization",
+            "com.unciv.logic.civilization.Civilization$NotificationsLog",
+            "com.unciv.logic.civilization.Civilization$HistoricalAttackMemory",
+            "com.unciv.logic.civilization.Notification",
+            "com.unciv.logic.civilization.PopupAlert",
+            "com.unciv.logic.civilization.ExploredRegion",
+            "com.unciv.logic.civilization.CivRankingHistory",
+            "com.unciv.logic.civilization.managers.VictoryManager",
+            "com.unciv.logic.civilization.managers.EspionageManager",
+            "com.unciv.logic.civilization.managers.ReligionManager",
+            "com.unciv.logic.civilization.managers.QuestManager",
+            "com.unciv.logic.civilization.managers.AssignedQuest",
+            "com.unciv.logic.civilization.managers.TechManager",
+            "com.unciv.logic.civilization.managers.GoldenAgeManager",
+            "com.unciv.logic.civilization.managers.PolicyManager",
+            "com.unciv.logic.civilization.managers.GreatPersonManager",
+            "com.unciv.logic.civilization.CivConstructions",
+            "com.unciv.logic.civilization.diplomacy.DiplomacyManager",
+            "com.unciv.logic.city.managers.CityPopulationManager",
+            "com.unciv.logic.city.managers.CityReligionManager",
+            "com.unciv.logic.city.managers.CityEspionageManager",
+            "com.unciv.logic.city.managers.CityExpansionManager",
+            "com.unciv.logic.trade.Trade",
+            "com.unciv.logic.trade.TradeRequest",
+            "com.unciv.logic.trade.TradeOffer",
+            "com.unciv.logic.trade.TradeOffersList",
+            "com.unciv.logic.automation.civilization.BarbarianManager",
+            "com.unciv.logic.automation.civilization.Encampment",
+            "com.unciv.models.Religion",
+            "com.unciv.models.Spy",
+            "com.unciv.models.ruleset.unique.TemporaryUnique",
+            "com.unciv.models.metadata.GameParameters",
+            "com.unciv.logic.map.MapParameters");
 
     private BuildWebCommon() {
     }
@@ -25,11 +98,9 @@ final class BuildWebCommon {
         Path assetsPath = repoRoot.resolve("android/assets");
         Path outputPath = repoRoot.resolve("web/build/dist");
         Path webappPath = outputPath.resolve("webapp");
-        Path resourcesPath = repoRoot.resolve("web/build/resources/main");
 
         cleanupOutput(outputPath);
         ensureDirectory(outputPath);
-        ensureDirectory(resourcesPath);
 
         WebBackend backend = new WebBackend()
                 .setWebAssembly(wasm)
@@ -43,6 +114,11 @@ final class BuildWebCommon {
                 .setStartJettyAfterBuild(false);
         TeaBuilder builder = new TeaBuilder(backend)
                 .addAssets(new AssetFileHandle(assetsPath.toString()));
+        for (String className : PRESERVED_CLASSES) {
+            if (!TeaReflectionSupplier.containsReflection(className)) {
+                TeaReflectionSupplier.addReflectionClass(className);
+            }
+        }
         builder.setMainClass(WebLauncher.class.getName())
                 .setOutputName(OUTPUT_NAME)
                 .setOptimizationLevel(TeaVMOptimizationLevel.SIMPLE)
@@ -55,8 +131,10 @@ final class BuildWebCommon {
         builder.build(outputPath.toFile());
         flattenWebapp(webappPath, outputPath);
         ensureStartupLogo(assetsPath, outputPath);
+        if (!wasm) {
+            hardenIndexBootstrap(outputPath.resolve("index.html"));
+        }
         sanitizeAtlasFiltersForWeb(outputPath.resolve("assets"));
-        if (!wasm) hardenIndexBootstrap(outputPath.resolve("index.html"));
         ensureFavicon(outputPath);
     }
 
@@ -164,30 +242,45 @@ final class BuildWebCommon {
         }
     }
 
+    /**
+     * Some browsers/runtimes can miss the plain load-listener bootstrap generated by TeaVM.
+     * Replace with a guarded bootstrap that starts once and retries until `main` is available.
+     */
     private static void hardenIndexBootstrap(Path indexPath) {
         if (!Files.isRegularFile(indexPath)) return;
         try {
             String content = Files.readString(indexPath);
-            String legacy = "<script>\n"
-                    + "            async function start() {\n"
-                    + "                main()\n"
-                    + "            }\n"
-                    + "            window.addEventListener(\"load\", start);\n"
-                    + "        </script>";
-            String hardened = "<script>\n"
-                    + "            (function () {\n"
-                    + "                function boot() {\n"
-                    + "                    if (window.__uncivBootStarted) return;\n"
-                    + "                    if (typeof window.main !== 'function') { setTimeout(boot, 25); return; }\n"
-                    + "                    window.__uncivBootStarted = true;\n"
-                    + "                    window.main();\n"
-                    + "                }\n"
-                    + "                if (document.readyState === 'complete') setTimeout(boot, 0);\n"
-                    + "                else window.addEventListener('load', boot, { once: true });\n"
-                    + "            })();\n"
-                    + "        </script>";
-            if (content.contains(legacy)) content = content.replace(legacy, hardened);
-            else if (!content.contains("__uncivBootStarted")) content = content.replace("</body>", hardened + "\n    </body>");
+            String legacy =
+                    "<script>\n"
+                            + "            async function start() {\n"
+                            + "                main()\n"
+                            + "            }\n"
+                            + "            window.addEventListener(\"load\", start);\n"
+                            + "        </script>";
+            String hardened =
+                    "<script>\n"
+                            + "            (function () {\n"
+                            + "                function boot() {\n"
+                            + "                    if (window.__uncivBootStarted) return;\n"
+                            + "                    if (typeof window.main !== 'function') {\n"
+                            + "                        setTimeout(boot, 25);\n"
+                            + "                        return;\n"
+                            + "                    }\n"
+                            + "                    window.__uncivBootStarted = true;\n"
+                            + "                    window.main();\n"
+                            + "                }\n"
+                            + "                if (document.readyState === 'complete') {\n"
+                            + "                    setTimeout(boot, 0);\n"
+                            + "                } else {\n"
+                            + "                    window.addEventListener('load', boot, { once: true });\n"
+                            + "                }\n"
+                            + "            })();\n"
+                            + "        </script>";
+            if (content.contains(legacy)) {
+                content = content.replace(legacy, hardened);
+            } else if (!content.contains("__uncivBootStarted")) {
+                content = content.replace("</body>", hardened + "\n    </body>");
+            }
             Files.writeString(indexPath, content);
         } catch (IOException e) {
             throw new RuntimeException("Failed hardening index bootstrap at " + indexPath, e);
