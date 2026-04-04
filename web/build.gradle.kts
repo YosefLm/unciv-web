@@ -10,11 +10,23 @@ val gdxVersion = rootProject.libs.versions.gdx.get()
 val coroutinesVersion = rootProject.libs.versions.coroutines.get()
 val ktorVersion = rootProject.libs.versions.ktor.get()
 val gdxTeaVMVersion = "-SNAPSHOT"
+val generatedWebJsTestsDir = layout.buildDirectory.dir("generated/web-jstests/kotlin")
+val generatedWebJsTestsDir = layout.buildDirectory.dir("generated/web-jstests/kotlin")
 
 sourceSets {
     main {
         java.srcDir("src/main/java")
         java.srcDir("src/main/kotlin")
+        java.srcDir("../tests/src")
+        java.srcDir(generatedWebJsTestsDir)
+        java.exclude("com/unciv/dev/**")
+        java.exclude("com/unciv/testing/GdxTestRunner.kt")
+        java.exclude("com/unciv/testing/GdxTestRunnerFactory.kt")
+        java.srcDir("../tests/src")
+        java.srcDir(generatedWebJsTestsDir)
+        java.exclude("com/unciv/dev/**")
+        java.exclude("com/unciv/testing/GdxTestRunner.kt")
+        java.exclude("com/unciv/testing/GdxTestRunnerFactory.kt")
     }
 }
 
@@ -41,6 +53,7 @@ java {
 
 dependencies {
     implementation(project(":core"))
+    implementation(kotlin("reflect"))
     implementation("com.badlogicgames.gdx:gdx:$gdxVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("io.ktor:ktor-client-core:$ktorVersion")
@@ -64,6 +77,90 @@ configurations.configureEach {
     }
 }
 
+val generateWebJsTestSuite by tasks.registering {
+    group = "web"
+    description = "Generate a browser-invokable suite for zero-argument JVM tests."
+    val testsSourceRoot = rootProject.file("tests/src")
+    inputs.dir(testsSourceRoot)
+    outputs.dir(generatedWebJsTestsDir)
+
+    doLast {
+        val outputFile = generatedWebJsTestsDir.get().asFile.resolve("com/unciv/app/web/WebJsTestSuite.kt")
+        outputFile.parentFile.mkdirs()
+        val packageRegex = Regex("^\\s*package\\s+([A-Za-z0-9_.]+)", setOf(RegexOption.MULTILINE))
+        val classRegex = Regex("^\\s*(?:public\\s+)?(?:class|object)\\s+([A-Za-z0-9_]+)\\s*(?:\\(([^)]*)\\))?", setOf(RegexOption.MULTILINE))
+        val methodRegex = Regex("^\\s*(?:public\\s+|private\\s+|internal\\s+|protected\\s+)?(?:suspend\\s+)?fun\\s+([A-Za-z0-9_]+)\\s*\\(")
+        val candidates = testsSourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.invariantSeparatorsPath.contains("/com/unciv/dev/") }
+            .sortedBy { it.invariantSeparatorsPath }
+            .toList()
+
+        val body = buildString {
+            appendLine("package com.unciv.app.web")
+            appendLine()
+            appendLine("data class WebJsGeneratedTestMethod(val name: String, val ignoredReason: String?, val execute: (Any) -> Unit)")
+            appendLine("data class WebJsGeneratedTestClass(val className: String, val createInstance: () -> Any, val beforeMethods: List<(Any) -> Unit>, val afterMethods: List<(Any) -> Unit>, val testMethods: List<WebJsGeneratedTestMethod>)")
+            appendLine("object WebJsTestSuite {")
+            appendLine("    val classes: List<WebJsGeneratedTestClass> = listOf(")
+            var classCount = 0
+            for (file in candidates) {
+                val source = file.readText()
+                if (!source.contains("@Test")) continue
+                val classMatch = classRegex.find(source) ?: continue
+                if (!classMatch.groupValues.getOrNull(2).orEmpty().trim().isEmpty()) continue
+                val packageName = packageRegex.find(source)?.groupValues?.get(1) ?: continue
+                val className = classMatch.groupValues[1]
+                val pending = mutableListOf<String>()
+                val beforeMethods = mutableListOf<String>()
+                val afterMethods = mutableListOf<String>()
+                val testMethods = mutableListOf<Pair<String, Boolean>>()
+                for (rawLine in source.lineSequence()) {
+                    val line = rawLine.trim()
+                    if (line.contains("@Before")) pending += "before"
+                    if (line.contains("@After")) pending += "after"
+                    if (line.contains("@Test")) pending += "test"
+                    if (line.contains("@Ignore")) pending += "ignore"
+                    val method = methodRegex.find(line)?.groupValues?.get(1)
+                    if (method != null) {
+                        if ("before" in pending) beforeMethods += method
+                        if ("after" in pending) afterMethods += method
+                        if ("test" in pending) testMethods += method to ("ignore" in pending)
+                        pending.clear()
+                    } else if (line.isNotBlank() && !line.startsWith("@") && !line.startsWith("//")) {
+                        pending.clear()
+                    }
+                }
+                if (testMethods.isEmpty()) continue
+                classCount++
+                val fqn = "$packageName.$className"
+                appendLine("        WebJsGeneratedTestClass(")
+                appendLine("            className = \"$fqn\",")
+                appendLine("            createInstance = { $fqn() },")
+                val beforeCode = beforeMethods.joinToString(", ") { method -> "{ instance -> (instance as $fqn).$method() }" }
+                val afterCode = afterMethods.joinToString(", ") { method -> "{ instance -> (instance as $fqn).$method() }" }
+                appendLine("            beforeMethods = listOf($beforeCode),")
+                appendLine("            afterMethods = listOf($afterCode),")
+                appendLine("            testMethods = listOf(")
+                for ((method, ignored) in testMethods) {
+                    val ignoredValue = if (ignored) "\"ignored\"" else "null"
+                    appendLine("                WebJsGeneratedTestMethod(\"$method\", $ignoredValue, { instance -> (instance as $fqn).$method() }),")
+                }
+                appendLine("            ),")
+                appendLine("        ),")
+            }
+            appendLine("    )")
+            appendLine("}")
+            logger.lifecycle("Generated $classCount zero-argument browser test classes at ${outputFile.invariantSeparatorsPath}")
+        }
+        outputFile.writeText(body)
+    }
+}
+
+tasks.named("compileKotlin") {
+    dependsOn(generateWebJsTestSuite)
+}
+
 tasks.register<JavaExec>("webBuildWasm") {
     dependsOn("classes")
     group = "web"
@@ -80,47 +177,30 @@ tasks.register<JavaExec>("webBuildWasm") {
 fun hardenIndexBootstrap(indexFile: File) {
     if (!indexFile.isFile) return
     var content = indexFile.readText()
-    if (!content.contains("rel=\"icon\"")) {
-        content = content.replace("<head>", "<head>\n        <link rel=\"icon\" href=\"data:,\">")
-    }
+    if (!content.contains("rel=\"icon\"")) content = content.replace("<head>", "<head>\n        <link rel=\"icon\" href=\"data:,\">")
     val hardened = """
         <script>
             (function () {
                 function boot() {
                     if (window.__uncivBootStarted) return;
-                    if (typeof window.main !== 'function') {
-                        setTimeout(boot, 25);
-                        return;
-                    }
+                    if (typeof window.main !== 'function') { setTimeout(boot, 25); return; }
                     window.__uncivBootStarted = true;
                     window.main();
                 }
-                if (document.readyState === 'complete') {
-                    setTimeout(boot, 0);
-                } else {
-                    window.addEventListener('load', boot, { once: true });
-                }
+                if (document.readyState === 'complete') setTimeout(boot, 0);
+                else window.addEventListener('load', boot, { once: true });
             })();
         </script>
     """.trimIndent()
-    val legacyRegex = Regex(
-        "<script>\\s*async function start\\(\\) \\{\\s*main\\(\\)\\s*}\\s*window.addEventListener\\(\\\"load\\\", start\\);\\s*</script>",
-        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-    )
-    content = if (legacyRegex.containsMatchIn(content)) {
-        content.replace(legacyRegex, hardened)
-    } else if (!content.contains("__uncivBootStarted")) {
-        content.replace("</body>", "$hardened\n    </body>")
-    } else {
-        content
-    }
+    val legacy = Regex("<script>\\s*async function start\\(\\).*?</script>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+    content = if (legacy.containsMatchIn(content)) content.replace(legacy, hardened)
+        else if (!content.contains("__uncivBootStarted")) content.replace("</body>", "$hardened\n    </body>") else content
     indexFile.writeText(content)
 }
 
 fun promoteWebappToRoot(outputDir: File) {
     val webappDir = File(outputDir, "webapp")
-    if (!webappDir.isDirectory) return
-    if (File(outputDir, "index.html").isFile) return
+    if (!webappDir.isDirectory || File(outputDir, "index.html").isFile) return
     webappDir.listFiles()?.forEach { child ->
         val target = File(outputDir, child.name)
         if (target.exists()) target.deleteRecursively()
@@ -150,7 +230,32 @@ tasks.register<JavaExec>("webBuildJs") {
     jvmArgs("-Xms1g", "-XX:+UseG1GC")
 }
 
+tasks.register<JavaExec>("webGenerateWarPreloads") {
+    dependsOn("classes")
+    group = "web"
+    description = "Generate deterministic WAR UI preload fixtures."
+    mainClass.set("com.unciv.app.web.WebWarPreloadTool")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = rootProject.projectDir
+    args("generate")
+    maxHeapSize = "2g"
+    jvmArgs("-Xms512m", "-XX:+UseG1GC")
+}
+
+tasks.register<JavaExec>("webVerifyWarPreloads") {
+    dependsOn("classes")
+    group = "web"
+    description = "Verify deterministic WAR UI preload fixtures."
+    mainClass.set("com.unciv.app.web.WebWarPreloadTool")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = rootProject.projectDir
+    args("verify")
+    maxHeapSize = "2g"
+    jvmArgs("-Xms512m", "-XX:+UseG1GC")
+}
+
 tasks.named("webBuildJs") {
+    dependsOn("webVerifyWarPreloads")
     finalizedBy("webPostProcessDist")
 }
 

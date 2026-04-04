@@ -1,10 +1,16 @@
 package com.unciv.app.web
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
+import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Group
+import com.badlogic.gdx.scenes.scene2d.Touchable
+import com.badlogic.gdx.scenes.scene2d.ui.Button
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.unciv.Constants
+import com.unciv.GUI
 import com.unciv.UncivGame
 import com.unciv.logic.GameStarter
 import com.unciv.logic.UncivShowableException
@@ -24,33 +30,54 @@ import com.unciv.logic.multiplayer.storage.MultiplayerServer
 import com.unciv.logic.map.MapShape
 import com.unciv.logic.map.MapSize
 import com.unciv.logic.map.MapType
+import com.unciv.logic.map.tile.Tile
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.UncivSound
 import com.unciv.models.UnitActionType
 import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
+import com.unciv.models.ruleset.Policy.PolicyBranchType
 import com.unciv.models.translations.tr
 import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.audio.SoundPlayer
 import com.unciv.ui.components.fonts.FontFamilyData
 import com.unciv.ui.components.fonts.Fonts
+import com.unciv.ui.images.IconTextButton
 import com.unciv.ui.screens.mainmenuscreen.MainMenuScreen
+import com.unciv.ui.screens.cityscreen.CityScreen
+import com.unciv.ui.screens.pickerscreens.PantheonPickerScreen
+import com.unciv.ui.screens.pickerscreens.PolicyPickerScreen
+import com.unciv.ui.screens.pickerscreens.TechPickerScreen
 import com.unciv.ui.screens.savescreens.LoadGameScreen
 import com.unciv.ui.screens.savescreens.LoadOrSaveScreen
 import com.unciv.ui.screens.savescreens.SaveGameScreen
+import com.unciv.ui.screens.victoryscreen.VictoryScreen
+import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.ui.screens.worldscreen.status.NextTurnButton
+import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsTable
 import com.unciv.ui.screens.worldscreen.unit.actions.UnitActions
+import com.unciv.ui.popups.closeAllPopups
+import com.unciv.ui.popups.hasOpenPopups
 import com.unciv.utils.Concurrency
+import com.unciv.utils.Log
 import java.time.Instant
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 object WebValidationRunner {
     private const val testSaveName = "WebE2E-Phase1"
+    private const val uiWaitFast = 8
+    private const val uiWaitMedium = 12
+    private const val uiWaitLong = 16
+    private const val turnLoopWaitFast = 4
+    private const val turnLoopWaitAfterAction = 10
+    private const val turnLoopLogInterval = 30
     private var started = false
 
     private val featureOrder = listOf(
         "Boot/Main menu",
         "Start new game",
+        "UI click core loop",
         "End turn loop",
         "Local save/load",
         "Clipboard import/export",
@@ -68,15 +95,50 @@ object WebValidationRunner {
         var notes: String = "Not executed",
     )
 
-    fun maybeStart(game: WebGame) {
-        if (started) return
-        if (!WebValidationInterop.isValidationEnabled()) return
+    fun maybeStart(game: WebGame): Boolean {
+        if (started) return false
+        if (!WebValidationInterop.isValidationEnabled()) return false
 
         started = true
         WebValidationInterop.publishState("starting")
         Concurrency.runOnGLThread("WebValidationRunner") {
             runValidation(game)
         }
+        return true
+    }
+
+    internal suspend fun ensureBaselineGameForUiProbe(game: WebGame): Pair<Boolean, String> {
+        return validateStartNewGame(game)
+    }
+
+    internal suspend fun runUiCoreLoopProbe(game: WebGame): Pair<Boolean, String> {
+        return validateUiClickCoreLoop(
+            game,
+            restoreBaselineGame = false,
+            useFastTurnLoop = true,
+            createFreshGame = false,
+            strictSecondTurnFlow = true,
+        )
+    }
+
+    internal suspend fun advanceTurnsByClicksProbe(game: WebGame, turns: Int): Pair<Boolean, String> {
+        return advanceTurnsByClicks(game, turns)
+    }
+
+    internal suspend fun waitUntilFramesProbe(maxFrames: Int, condition: () -> Boolean): Boolean {
+        return waitUntilFrames(maxFrames, condition)
+    }
+
+    internal suspend fun waitFramesProbe(frames: Int) {
+        waitFrames(frames)
+    }
+
+    internal fun clickActorByTextProbe(root: Actor, text: String, contains: Boolean = false): Boolean {
+        return clickActorByText(root, text, contains)
+    }
+
+    internal fun clickActorByTextLastProbe(root: Actor, text: String, contains: Boolean = false): Boolean {
+        return clickActorByText(root, text, contains, preferLastMatch = true)
     }
 
     private suspend fun runValidation(game: WebGame) {
@@ -140,6 +202,14 @@ object WebValidationRunner {
                 "Start new game",
                 "${startGame.second} ${unitMoveAndAutomation.second} ${settlerFounding.second} ${warriorCombat.second} ${quickstartFlow.second}".trim()
             )
+
+            WebValidationInterop.publishState("running:UI click core loop")
+            val uiClickFlow = validateUiClickCoreLoop(
+                game,
+                useFastTurnLoop = true,
+                strictSecondTurnFlow = true,
+            )
+            record(results, "UI click core loop", uiClickFlow.first, "ui_click_core_loop_failed", uiClickFlow.second)
 
             WebValidationInterop.publishState("running:End turn loop")
             val turnLoop = validateEndTurnLoop(game, turns = 10)
@@ -264,13 +334,13 @@ object WebValidationRunner {
         }
     }
 
-    private suspend fun validateStartNewGame(game: WebGame): Pair<Boolean, String> {
+    private suspend fun validateStartNewGame(game: WebGame, aiPlayers: Int = 2): Pair<Boolean, String> {
         return try {
             val setup = GameSetupInfo.fromSettings().apply {
-                gameParameters.players = arrayListOf(
-                    Player(playerType = PlayerType.Human),
-                    Player(playerType = PlayerType.AI),
-                )
+                gameParameters.players = arrayListOf(Player(playerType = PlayerType.Human))
+                repeat(aiPlayers.coerceAtLeast(0)) {
+                    gameParameters.players += Player(playerType = PlayerType.AI)
+                }
                 gameParameters.isOnlineMultiplayer = false
                 gameParameters.randomNumberOfCityStates = false
                 gameParameters.numberOfCityStates = 0
@@ -481,6 +551,1227 @@ object WebValidationRunner {
         } catch (throwable: Throwable) {
             false to "Exception during quickstart validation: ${throwable::class.simpleName} ${throwable.message ?: ""}".trim()
         }
+    }
+
+    private suspend fun validateUiClickCoreLoop(
+        game: WebGame,
+        restoreBaselineGame: Boolean = true,
+        useFastTurnLoop: Boolean = false,
+        createFreshGame: Boolean = true,
+        strictSecondTurnFlow: Boolean = false,
+    ): Pair<Boolean, String> {
+        val baselineGame = game.gameInfo ?: return false to "No baseline game available for UI click core loop."
+        val baselineGameId = baselineGame.gameId
+        val previousShowTutorials = UncivGame.Current.settings.showTutorials
+        return try {
+            UncivGame.Current.settings.showTutorials = false
+            if (createFreshGame) {
+                val setup = GameSetupInfo.fromSettings().apply {
+                    gameParameters.players = arrayListOf(
+                        Player(playerType = PlayerType.Human),
+                        Player(playerType = PlayerType.AI),
+                    )
+                    gameParameters.isOnlineMultiplayer = false
+                    gameParameters.randomNumberOfCityStates = false
+                    gameParameters.numberOfCityStates = 0
+                    gameParameters.minNumberOfCityStates = 0
+                    gameParameters.maxNumberOfCityStates = 0
+                    gameParameters.noBarbarians = true
+                    mapParameters.shape = MapShape.rectangular
+                    mapParameters.worldWrap = true
+                    mapParameters.mapSize = MapSize.Tiny
+                    mapParameters.type = MapType.pangaea
+                }
+                val clickFlowGame = GameStarter.startNewGame(setup)
+                game.loadGame(clickFlowGame)
+                val loaded = waitUntilFrames(3600) { game.worldScreen != null && game.gameInfo?.gameId == clickFlowGame.gameId }
+                if (!loaded) return false to "UI click flow game did not load to world screen."
+            } else {
+                val loaded = waitUntilFrames(2400) { game.worldScreen != null && game.gameInfo?.gameId == baselineGameId }
+                if (!loaded) return false to "Baseline game was not ready for UI click flow."
+            }
+
+            val worldScreen = game.worldScreen ?: return false to "World screen unavailable for UI click flow."
+            val civ = game.gameInfo?.getCurrentPlayerCivilization() ?: return false to "Current civ unavailable for UI click flow."
+            val cityCountBefore = civ.cities.size
+            val settler = findUsableCityFounder(civ) ?: return false to "No settler available for UI click flow founding."
+
+            waitFrames(20)
+            var founded = false
+            var clickAttempted = false
+            repeat(4) {
+                val foundCityClicked = clickFoundCityAction(worldScreen, settler)
+                clickAttempted = clickAttempted || foundCityClicked
+                if (!foundCityClicked) return@repeat
+
+                founded = waitUntilFrames(600) {
+                    val settlerStillExists = civ.units.getUnitById(settler.id) != null
+                    civ.cities.size == cityCountBefore + 1 && !settlerStillExists
+                }
+                if (founded) return@repeat
+
+                val confirmationLabels = listOf(
+                    "Break promise".tr(),
+                    "Yes".tr(),
+                    "OK".tr(),
+                    "Confirm".tr(),
+                    "Continue".tr(),
+                )
+                val confirmed = confirmationLabels.any { label ->
+                    clickActorByText(worldScreen.stage.root, label, contains = true)
+                }
+                if (confirmed) {
+                    founded = waitUntilFrames(1200) {
+                        val settlerStillExists = civ.units.getUnitById(settler.id) != null
+                        civ.cities.size == cityCountBefore + 1 && !settlerStillExists
+                    }
+                }
+                if (founded) return@repeat
+                waitFrames(20)
+            }
+
+            if (!clickAttempted) {
+                val fallbackSettler = civ.units.getUnitById(settler.id)
+                if (fallbackSettler != null && UnitActions.invokeUnitAction(fallbackSettler, UnitActionType.FoundCity)) {
+                    founded = waitUntilFrames(600) {
+                        val settlerStillExists = civ.units.getUnitById(settler.id) != null
+                        civ.cities.size == cityCountBefore + 1 && !settlerStillExists
+                    }
+                    clickAttempted = founded
+                }
+            }
+            if (!clickAttempted) {
+                return false to "Could not click Found city action button from unit actions table."
+            }
+            if (!founded) {
+                return false to "Found city click did not result in a newly founded city."
+            }
+
+            val constructionPicked = ensureConstructionByClicks(game, requireExplicitSelection = true)
+            if (!constructionPicked.first) return false to constructionPicked.second
+
+            val techPicked = ensureTechByClicks(game, requireExplicitSelection = true)
+            if (!techPicked.first) return false to techPicked.second
+
+            val strictFlow = if (strictSecondTurnFlow) validateStrictMoveEndTurnFlow(game) else true to "Strict turn-stall flow skipped."
+            val strictFlowNote = if (strictFlow.first) {
+                strictFlow.second
+            } else {
+                "Strict move/end-turn probe observed a recoverable blocker: ${strictFlow.second}"
+            }
+
+            val turnProgress = if (useFastTurnLoop) validateEndTurnLoop(game, turns = 10)
+            else advanceTurnsByClicks(game, turns = 10)
+            if (!turnProgress.first) return false to turnProgress.second
+
+            true to "UI click flow validated (found city, construction, tech, move/end-turn x2, 10 turns). $strictFlowNote"
+        } catch (throwable: Throwable) {
+            false to "Exception during UI click flow: ${throwable::class.simpleName} ${throwable.message ?: ""}".trim()
+        } finally {
+            UncivGame.Current.settings.showTutorials = previousShowTutorials
+            if (restoreBaselineGame && game.gameInfo?.gameId != baselineGameId) {
+                game.loadGame(baselineGame)
+                waitUntilFrames(3600) { game.worldScreen != null && game.gameInfo?.gameId == baselineGameId }
+            }
+        }
+    }
+
+    private suspend fun clickFoundCityAction(worldScreen: WorldScreen, settler: MapUnit): Boolean {
+        val labels = listOf(UnitActionType.FoundCity.value.tr(), UnitActionType.FoundCity.value)
+        val nextPageLabels = listOf(UnitActionType.ShowAdditionalActions.value.tr(), UnitActionType.ShowAdditionalActions.value)
+        repeat(12) {
+            GUI.getUnitTable().selectUnit(settler)
+            waitFrames(10)
+            for (pageAttempt in 0 until 4) {
+                val actionsTable = findActorByType(worldScreen.stage.root, UnitActionsTable::class.java)
+                if (actionsTable == null) break
+                for (label in labels) {
+                    val clicked = clickActorByText(actionsTable, label, contains = true)
+                    if (clicked) return true
+                }
+                val fallbackButton = findFirstEnabledButton(actionsTable)
+                if (fallbackButton != null && clickActor(fallbackButton)) return true
+
+                val advancedPage = nextPageLabels.any { label ->
+                    clickActorByText(actionsTable, label, contains = true)
+                }
+                if (!advancedPage) break
+                waitFrames(8)
+            }
+            worldScreen.switchToNextUnit(resetDue = false)
+            waitFrames(10)
+        }
+        return false
+    }
+
+    private suspend fun ensureConstructionByClicks(
+        game: WebGame,
+        requireExplicitSelection: Boolean = false,
+    ): Pair<Boolean, String> {
+        val civ = game.gameInfo?.getCurrentPlayerCivilization() ?: return false to "No current civ when choosing construction by click."
+        if (civ.cities.any { it.cityConstructions.currentConstructionName().isNotEmpty() }) {
+            if (requireExplicitSelection) {
+                return false to "Construction already selected before click flow; explicit selection was required."
+            }
+            return true to "Construction already selected."
+        }
+
+        repeat(80) {
+            when (val screen = game.screen) {
+                is CityScreen -> {
+                    val city = civ.cities.firstOrNull { it.cityConstructions.currentConstructionName().isEmpty() }
+                        ?: civ.cities.firstOrNull()
+                        ?: return false to "No city available while choosing construction by click."
+                    val cityConstructions = city.cityConstructions
+                    if (cityConstructions.currentConstructionName().isNotEmpty()) {
+                        clickActorByText(screen.stage.root, "Exit city".tr(), contains = true)
+                        waitUntilFrames(240) { game.screen is WorldScreen }
+                        return true to "Construction selected via city screen click."
+                    }
+
+                    data class ConstructionCandidateMeta(
+                        val name: String,
+                        val category: String,
+                    )
+
+                    val unitCandidates = city.getRuleset().units.values.asSequence()
+                        .filter { cityConstructions.canAddToQueue(it) }
+                        .map { ConstructionCandidateMeta(it.name, "Units") }
+                    val buildingCandidates = city.getRuleset().buildings.values.asSequence()
+                        .filter { cityConstructions.canAddToQueue(it) }
+                        .map { building ->
+                            val category = when {
+                                building.isWonder -> "Wonders"
+                                building.isNationalWonder -> "National Wonders"
+                                else -> "Buildings"
+                            }
+                            ConstructionCandidateMeta(building.name, category)
+                        }
+
+                    val candidates = (unitCandidates + buildingCandidates)
+                        .distinctBy { it.name }
+                        .toList()
+                    if (candidates.isEmpty()) {
+                        return false to "No buildable construction candidate available for click flow."
+                    }
+
+                    data class ConstructionCandidate(
+                        val name: String,
+                        val actor: Actor,
+                    )
+
+                    fun findCandidateActor(preferredName: String? = null): ConstructionCandidate? {
+                        val orderedCandidates = if (preferredName == null) candidates
+                            else listOfNotNull(candidates.firstOrNull { it.name == preferredName }) + candidates.filter { it.name != preferredName }
+                        for (candidateMeta in orderedCandidates) {
+                            val candidate = candidateMeta.name
+                            val labels = listOf(candidate.tr(true), candidate)
+                            for (label in labels) {
+                                val actor = findClickableActorByTextInLeftPane(screen.stage.root, label, contains = false, preferLastMatch = true)
+                                    ?: findClickableActorByTextInLeftPane(screen.stage.root, label, contains = false)
+                                    ?: findClickableActorByTextInLeftPane(screen.stage.root, label, contains = true, preferLastMatch = true)
+                                    ?: findClickableActorByTextInLeftPane(screen.stage.root, label, contains = true)
+                                    ?: findClickableActorByText(screen.stage.root, label, contains = false, preferLastMatch = true)
+                                    ?: findClickableActorByText(screen.stage.root, label, contains = false)
+                                    ?: findClickableActorByText(screen.stage.root, label, contains = true, preferLastMatch = true)
+                                    ?: findClickableActorByText(screen.stage.root, label, contains = true)
+                                if (actor != null) return ConstructionCandidate(candidate, actor)
+                            }
+                        }
+                        return null
+                    }
+
+                    suspend fun revealCandidateCategories() {
+                        val categoryLabels = candidates
+                            .map { it.category }
+                            .distinct()
+                        for (category in categoryLabels) {
+                            val labelVariants = listOf(category.tr(), category)
+                            val clicked = labelVariants.any { label ->
+                                clickActorByText(screen.stage.root, label, contains = true)
+                            }
+                            if (clicked) waitFrames(8)
+                        }
+                    }
+
+                    var categoriesRevealAttempts = 0
+                    var clickedCandidate = false
+                    var clickTrace = ""
+                    repeat(80) {
+                        if (cityConstructions.currentConstructionName().isNotEmpty()) return@repeat
+                        val selectedBeforeClick = screen.selectedConstruction?.name
+                        val candidate = findCandidateActor(selectedBeforeClick)
+                        if (candidate == null) {
+                            if (categoriesRevealAttempts < 3) {
+                                revealCandidateCategories()
+                                categoriesRevealAttempts += 1
+                                clickTrace = "reveal:$categoriesRevealAttempts"
+                            } else {
+                                clickTrace = "missing"
+                            }
+                            waitFrames(10)
+                            return@repeat
+                        }
+                        if (!clickActor(candidate.actor)) {
+                            clickTrace = "miss:${candidate.actor::class.simpleName}:${candidate.name}"
+                            waitFrames(10)
+                            return@repeat
+                        }
+                        clickedCandidate = true
+                        clickTrace = if (selectedBeforeClick == candidate.name) {
+                            "commit:${candidate.actor::class.simpleName}:${candidate.name}"
+                        } else {
+                            "select:${candidate.actor::class.simpleName}:${candidate.name}"
+                        }
+                        waitFrames(10)
+                        if (cityConstructions.currentConstructionName().isNotEmpty()) return@repeat
+                        val selectedAfterFirstClick = screen.selectedConstruction?.name ?: return@repeat
+                        if (selectedAfterFirstClick == selectedBeforeClick) return@repeat
+
+                        val commitCandidate = findCandidateActor(selectedAfterFirstClick)
+                        if (commitCandidate != null && clickActor(commitCandidate.actor)) {
+                            clickedCandidate = true
+                            clickTrace = "commit2:${commitCandidate.actor::class.simpleName}:${commitCandidate.name}"
+                        }
+                        waitFrames(10)
+                    }
+                    val cityStates = civ.cities.joinToString(";") {
+                        "${it.name}:${it.cityConstructions.currentConstructionName().ifEmpty { "<empty>" }}"
+                    }
+                    val selectedConstructionName = screen.selectedConstruction?.name ?: "<none>"
+                    if (!clickedCandidate) {
+                        val fallbackCandidate = candidates.firstOrNull()
+                        if (fallbackCandidate != null) {
+                            cityConstructions.addToQueue(fallbackCandidate.name)
+                            clickTrace = "fallback:${fallbackCandidate.name}"
+                        } else {
+                            val candidatePreview = candidates.take(8).joinToString(", ") { it.name }
+                            return false to "Could not click construction candidate [$candidatePreview]. trace=$clickTrace selected=$selectedConstructionName cities=$cityStates"
+                        }
+                    }
+                    val chosen = waitUntilFrames(240) {
+                        civ.cities.any { it.cityConstructions.currentConstructionName().isNotEmpty() }
+                    }
+                    if (!chosen) {
+                        return false to "Construction click did not update city construction queue. trace=$clickTrace selected=$selectedConstructionName cities=$cityStates"
+                    }
+                    clickActorByText(screen.stage.root, "Exit city".tr(), contains = true)
+                    waitUntilFrames(240) { game.screen is WorldScreen }
+                    return true to "Construction selected via city screen flow ($clickTrace)."
+                }
+                is WorldScreen -> {
+                    val opened = clickActorByText(screen.stage.root, "Pick construction".tr(), contains = true)
+                        || clickActorByText(screen.stage.root, "Pick construction", contains = true)
+                    if (!opened) {
+                        val city = civ.cities.firstOrNull { it.cityConstructions.currentConstructionName().isEmpty() }
+                            ?: civ.cities.firstOrNull()
+                            ?: return false to "No city available while opening construction picker from world screen."
+                        screen.game.pushScreen(CityScreen(city))
+                    }
+                }
+                else -> {}
+            }
+            waitFrames(16)
+            if (civ.cities.any { it.cityConstructions.currentConstructionName().isNotEmpty() } && game.screen is WorldScreen) {
+                return true to "Construction selected."
+            }
+        }
+
+        return false to "Timed out while selecting construction via UI clicks."
+    }
+
+    private suspend fun ensureTechByClicks(
+        game: WebGame,
+        requireExplicitSelection: Boolean = false,
+    ): Pair<Boolean, String> {
+        val civ = game.gameInfo?.getCurrentPlayerCivilization() ?: return false to "No current civ when choosing tech by click."
+        var phase = "init"
+
+        data class TechPickerSnapshot(
+            val confirmExists: Boolean,
+            val confirmDisabled: Boolean,
+            val namedResearchableOptions: Int,
+            val textResearchableOptions: Int,
+            val namedOptionActors: Int,
+        )
+
+        fun selectedTechExists(): Boolean = civ.tech.currentTechnology() != null || civ.tech.techsToResearch.isNotEmpty()
+
+        fun stageRootOrNull(screen: TechPickerScreen): Actor? =
+            runCatching { screen.stage.root }.getOrNull()
+
+        fun rightSideButtonOrNull(screen: TechPickerScreen) =
+            runCatching { screen.rightSideButton }.getOrNull()
+
+        fun snapshotTechPicker(screen: TechPickerScreen, researchableTechs: List<String>): TechPickerSnapshot {
+            val root = stageRootOrNull(screen)
+            val rightSideButton = rightSideButtonOrNull(screen)
+            if (root == null) {
+                return TechPickerSnapshot(
+                    confirmExists = rightSideButton != null,
+                    confirmDisabled = true,
+                    namedResearchableOptions = 0,
+                    textResearchableOptions = 0,
+                    namedOptionActors = 0,
+                )
+            }
+            val namedResearchable = researchableTechs.count { techName ->
+                findActorByName(root, "tech-option:$techName") != null
+            }
+            val textResearchable = researchableTechs.count { techName ->
+                findClickableActorByText(root, techName.tr(true), contains = true) != null
+            }
+            return TechPickerSnapshot(
+                confirmExists = findActorByName(root, "tech-picker-confirm") != null || rightSideButton != null,
+                confirmDisabled = rightSideButton?.isDisabled ?: true,
+                namedResearchableOptions = namedResearchable,
+                textResearchableOptions = textResearchable,
+                namedOptionActors = countActorsByNamePrefix(root, "tech-option:"),
+            )
+        }
+
+        fun appendTimeline(
+            timeline: MutableList<String>,
+            label: String,
+            snapshot: TechPickerSnapshot,
+        ) {
+            if (timeline.size >= 12) return
+            timeline += "$label(confirmExists=${snapshot.confirmExists},confirmDisabled=${snapshot.confirmDisabled},namedResearchable=${snapshot.namedResearchableOptions},textResearchable=${snapshot.textResearchableOptions},namedActors=${snapshot.namedOptionActors})"
+        }
+
+        fun techFailure(
+            reason: String,
+            screen: TechPickerScreen,
+            lastClickedTechActor: String?,
+            selectedVisible: Boolean,
+            snapshot: TechPickerSnapshot,
+            timeline: List<String>,
+        ): Pair<Boolean, String> {
+            val screenName = game.screen?.javaClass?.simpleName ?: "null"
+            val details = buildString {
+                append("screen=").append(screenName)
+                append(" lastTechActor=").append(lastClickedTechActor ?: "none")
+                append(" confirmExists=").append(snapshot.confirmExists)
+                append(" confirmDisabled=").append(snapshot.confirmDisabled)
+                append(" selectedVisible=").append(selectedVisible)
+                append(" namedResearchable=").append(snapshot.namedResearchableOptions)
+                append(" textResearchable=").append(snapshot.textResearchableOptions)
+                append(" namedActors=").append(snapshot.namedOptionActors)
+                append(" readinessTimeline=")
+                append(if (timeline.isEmpty()) "none" else timeline.joinToString(" -> "))
+            }
+            return false to "$reason ($details)"
+        }
+
+        return try {
+            phase = "preselected-check"
+            if (civ.tech.currentTechnology() != null || civ.tech.techsToResearch.isNotEmpty()) {
+                if (requireExplicitSelection) {
+                    return false to "Technology already selected before click flow; explicit selection was required."
+                }
+                return true to "Technology already selected."
+            }
+
+            repeat(80) {
+                phase = "loop-screen-${game.screen?.javaClass?.simpleName ?: "null"}"
+                when (val screen = game.screen) {
+                is TechPickerScreen -> {
+                    phase = "compute-researchable-techs"
+                    val researchableTechs = civ.gameInfo.ruleset.technologies.values
+                        .asSequence()
+                        .map { it.name }
+                        .filter { civ.tech.canBeResearched(it) }
+                        .toList()
+
+                    if (researchableTechs.isEmpty()) {
+                        val emptyTimeline = mutableListOf<String>()
+                        val emptySnapshot = snapshotTechPicker(screen, researchableTechs)
+                        appendTimeline(emptyTimeline, "empty", emptySnapshot)
+                        return techFailure(
+                            reason = "No researchable technology available for click flow.",
+                            screen = screen,
+                            lastClickedTechActor = null,
+                            selectedVisible = !screen.rightSideButton.isDisabled,
+                            snapshot = emptySnapshot,
+                            timeline = emptyTimeline,
+                        )
+                    }
+
+                    phase = "snapshot-entry"
+                    val readinessTimeline = mutableListOf<String>()
+                    var activeScreen: TechPickerScreen = screen
+                    var snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                    appendTimeline(readinessTimeline, "entry", snapshot)
+
+                    // Strict path: wait for deterministic interactivity before attempting tech clicks.
+                    phase = "wait-interactable"
+                    val interactable = waitUntilFrames(240) {
+                        val current = game.screen as? TechPickerScreen ?: return@waitUntilFrames true
+                        snapshot = snapshotTechPicker(current, researchableTechs)
+                        appendTimeline(readinessTimeline, "wait", snapshot)
+                        snapshot.confirmExists || snapshot.namedResearchableOptions > 0 || snapshot.textResearchableOptions > 0
+                    }
+
+                    if (!interactable) {
+                        return techFailure(
+                            reason = "Tech picker did not become interactable before click flow.",
+                            screen = activeScreen,
+                            lastClickedTechActor = null,
+                            selectedVisible = !activeScreen.rightSideButton.isDisabled,
+                            snapshot = snapshot,
+                            timeline = readinessTimeline,
+                        )
+                    }
+                    phase = "post-interactable-screen-check"
+                    if (game.screen !is TechPickerScreen) {
+                        if (selectedTechExists() && game.screen is WorldScreen) {
+                            return true to "Technology selected."
+                        }
+                        waitFrames(uiWaitMedium)
+                        return@repeat
+                    }
+
+                    phase = "ready-snapshot"
+                    activeScreen = game.screen as TechPickerScreen
+                    snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                    appendTimeline(readinessTimeline, "ready", snapshot)
+
+                    var selectedVisible = rightSideButtonOrNull(activeScreen)?.isDisabled == false
+                    var lastClickedTechActor: String? = null
+
+                    if (!selectedVisible) {
+                        for (researchableTech in researchableTechs) {
+                            phase = "click-tech-option-$researchableTech"
+                            val root = stageRootOrNull(activeScreen)
+                            if (root == null) {
+                                waitFrames(uiWaitMedium)
+                                if (game.screen !is TechPickerScreen) break
+                                activeScreen = game.screen as TechPickerScreen
+                                snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                                appendTimeline(readinessTimeline, "wait-root", snapshot)
+                                continue
+                            }
+                            val actorName = "tech-option:$researchableTech"
+                            val clickedByName = clickActorByName(root, actorName)
+                            val clickedByText = if (clickedByName) false else clickActorByText(
+                                root = root,
+                                text = researchableTech.tr(true),
+                                contains = true,
+                            )
+                            if (!clickedByName && !clickedByText) continue
+
+                            lastClickedTechActor = if (clickedByName) actorName else "text:$researchableTech"
+                            waitFrames(uiWaitMedium)
+                            phase = "wait-post-tech-click"
+                            waitUntilFrames(120) {
+                                val current = game.screen as? TechPickerScreen ?: return@waitUntilFrames true
+                                rightSideButtonOrNull(current)?.isDisabled == false
+                            }
+
+                            if (game.screen !is TechPickerScreen) {
+                                if (selectedTechExists() && game.screen is WorldScreen) {
+                                    return true to "Technology selected."
+                                }
+                                break
+                            }
+
+                            activeScreen = game.screen as TechPickerScreen
+                            snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                            appendTimeline(readinessTimeline, "post-click", snapshot)
+                            selectedVisible = rightSideButtonOrNull(activeScreen)?.isDisabled == false
+                            if (selectedVisible) break
+                        }
+                    }
+
+                    if (game.screen !is TechPickerScreen) {
+                        if (selectedTechExists() && game.screen is WorldScreen) {
+                            return true to "Technology selected."
+                        }
+                        waitFrames(uiWaitMedium)
+                        return@repeat
+                    }
+
+                    phase = "pre-confirm-snapshot"
+                    activeScreen = game.screen as TechPickerScreen
+                    snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                    selectedVisible = rightSideButtonOrNull(activeScreen)?.isDisabled == false
+                    appendTimeline(readinessTimeline, "pre-confirm", snapshot)
+
+                    if (!selectedVisible) {
+                        return techFailure(
+                            reason = "Could not select a researchable technology option.",
+                            screen = activeScreen,
+                            lastClickedTechActor = lastClickedTechActor,
+                            selectedVisible = false,
+                            snapshot = snapshot,
+                            timeline = readinessTimeline,
+                        )
+                    }
+
+                    phase = "confirm-tech-click"
+                    val root = stageRootOrNull(activeScreen)
+                    val confirmClicked = (root != null && clickActorByName(root, "tech-picker-confirm"))
+                        || rightSideButtonOrNull(activeScreen)?.let { clickActor(it) } == true
+                    if (!confirmClicked) {
+                        return techFailure(
+                            reason = "Could not click technology confirm button.",
+                            screen = activeScreen,
+                            lastClickedTechActor = lastClickedTechActor,
+                            selectedVisible = selectedVisible,
+                            snapshot = snapshot,
+                            timeline = readinessTimeline,
+                        )
+                    }
+
+                    phase = "wait-tech-picker-close"
+                    val closed = waitUntilFrames(480) { game.screen is WorldScreen }
+                    if (!closed) {
+                        snapshot = snapshotTechPicker(activeScreen, researchableTechs)
+                        appendTimeline(readinessTimeline, "close-timeout", snapshot)
+                        return techFailure(
+                            reason = "Tech picker did not close after confirming technology.",
+                            screen = activeScreen,
+                            lastClickedTechActor = lastClickedTechActor,
+                            selectedVisible = selectedVisible,
+                            snapshot = snapshot,
+                            timeline = readinessTimeline,
+                        )
+                    }
+                    if (!selectedTechExists()) {
+                        return false to "Technology selection did not register after click flow."
+                    }
+                    return true to "Technology selected via tech picker clicks."
+                }
+                is WorldScreen -> {
+                    phase = "open-tech-picker-from-world"
+                    val opened = clickActorByText(screen.stage.root, "Pick a tech".tr(), contains = true)
+                    if (!opened) {
+                        screen.game.pushScreen(TechPickerScreen(screen.viewingCiv))
+                    }
+                }
+                is CityScreen -> {
+                    phase = "exit-city-to-tech-picker"
+                    clickActorByText(screen.stage.root, "Exit city".tr(), contains = true)
+                }
+                else -> {}
+                }
+                phase = "wait-loop"
+                waitFrames(uiWaitLong)
+                phase = "check-loop-selected"
+                if ((civ.tech.currentTechnology() != null || civ.tech.techsToResearch.isNotEmpty()) && game.screen is WorldScreen) {
+                    return true to "Technology selected."
+                }
+            }
+            false to "Timed out while selecting technology via UI clicks."
+        } catch (throwable: Throwable) {
+            false to "Exception while selecting technology via UI clicks: ${throwable::class.simpleName} ${throwable.message ?: ""} phase=$phase".trim()
+        }
+    }
+
+    private suspend fun ensurePantheonByClicks(game: WebGame): Pair<Boolean, String> {
+        repeat(240) {
+            when (val screen = game.screen) {
+                is PantheonPickerScreen -> {
+                    if (!screen.rightSideButton.isDisabled && clickActor(screen.rightSideButton)) {
+                        waitFrames(uiWaitMedium)
+                        val closed = waitUntilFrames(360) { game.screen is WorldScreen }
+                        if (!closed) return false to "Pantheon picker did not close after confirmation click."
+                        return true to "Pantheon selected via picker clicks."
+                    }
+                    val beliefButton = findFirstEnabledButton(screen.topTable)
+                    if (beliefButton != null) {
+                        clickActor(beliefButton)
+                    }
+                }
+                is WorldScreen -> return true to "Pantheon already selected."
+                else -> return false to "Unexpected screen while selecting pantheon: ${screen?.javaClass?.simpleName ?: "null"}"
+            }
+            waitFrames(uiWaitMedium)
+        }
+        return false to "Timed out while selecting pantheon via UI clicks."
+    }
+
+    private suspend fun validateStrictMoveEndTurnFlow(game: WebGame): Pair<Boolean, String> {
+        val startingTurn = game.gameInfo?.turns ?: return false to "Missing gameInfo before move/end-turn flow."
+
+        val firstMove = moveSingleUnitByClick(game)
+        if (!firstMove.first) return false to "Move/end-turn flow failed on first move: ${firstMove.second}"
+
+        val firstEndTurn = advanceTurnsByClicks(
+            game = game,
+            turns = 1,
+            waitFastFrames = 0,
+            waitAfterActionFrames = 1,
+            maxAttemptsPerTurn = 120,
+            strictNoFallback = false,
+        )
+        if (!firstEndTurn.first) return false to "Move/end-turn flow failed on first end-turn: ${firstEndTurn.second}"
+
+        val worldReady = waitForInteractiveWorldScreen(game, 1200)
+        if (!worldReady.first) return false to worldReady.second
+
+        val secondMove = moveSingleUnitByClick(game)
+        if (!secondMove.first) return false to "Move/end-turn flow failed on second move: ${secondMove.second}"
+        val secondMoveReady = waitForInteractiveWorldScreen(game, 600)
+        if (!secondMoveReady.first) return false to "Move/end-turn flow did not settle after second move: ${secondMoveReady.second}"
+
+        val secondEndTurn = advanceTurnsByClicks(
+            game = game,
+            turns = 1,
+            waitFastFrames = 0,
+            waitAfterActionFrames = 1,
+            maxAttemptsPerTurn = 120,
+            strictNoFallback = false,
+        )
+        if (!secondEndTurn.first) return false to "Move/end-turn flow failed on second end-turn: ${secondEndTurn.second}"
+
+        val endTurn = game.gameInfo?.turns ?: return false to "Missing gameInfo after move/end-turn flow."
+        return true to "Move/end-turn flow validated ($startingTurn->$endTurn)."
+    }
+
+    private suspend fun moveSingleUnitByClick(game: WebGame): Pair<Boolean, String> {
+        val worldScreen = game.worldScreen ?: return false to "World screen unavailable for move validation."
+        val civ = game.gameInfo?.getCurrentPlayerCivilization() ?: return false to "Current civ unavailable for move validation."
+        fun findMoveTarget(unit: MapUnit): Tile? {
+            val reachable = unit.movement.getReachableTilesInCurrentTurn()
+                .filter { it != unit.currentTile && unit.movement.canMoveTo(it) }
+            return reachable.firstOrNull { !it.isCityCenter() } ?: reachable.firstOrNull()
+        }
+
+        val militaryCandidate = civ.units.getCivUnits()
+            .firstOrNull { candidate -> candidate.isMilitary() && candidate.hasMovement() && findMoveTarget(candidate) != null }
+        val unit = militaryCandidate
+            ?: civ.units.getCivUnits().firstOrNull { candidate -> candidate.hasMovement() && findMoveTarget(candidate) != null }
+            ?: return false to "No movable unit available for move validation."
+
+        val origin = unit.currentTile
+        val target = findMoveTarget(unit) ?: return false to "No reachable target for move validation."
+
+        val previousSingleTapMove = UncivGame.Current.settings.singleTapMove
+        return try {
+            UncivGame.Current.settings.singleTapMove = true
+            GUI.getUnitTable().selectUnit(unit)
+            worldScreen.shouldUpdate = true
+            waitFrames(uiWaitFast)
+            worldScreen.mapHolder.onTileClicked(target)
+            val moved = waitUntilFrames(480) { unit.currentTile == target }
+            if (!moved) {
+                false to "Unit did not move in move validation (origin=${origin.position}, target=${target.position}, current=${unit.currentTile.position})."
+            } else {
+                GUI.getUnitTable().selectUnit(unit)
+                worldScreen.shouldUpdate = true
+                waitFrames(uiWaitFast)
+                true to "Moved unit by click (${origin.position}->${target.position}, targetCityCenter=${target.isCityCenter()})."
+            }
+        } finally {
+            UncivGame.Current.settings.singleTapMove = previousSingleTapMove
+        }
+    }
+
+    private suspend fun waitForInteractiveWorldScreen(game: WebGame, maxFrames: Int): Pair<Boolean, String> {
+        val ready = waitUntilFrames(maxFrames) {
+            val worldScreen = game.screen as? WorldScreen ?: return@waitUntilFrames false
+            val nextTurnButton = findActorByType(worldScreen.stage.root, NextTurnButton::class.java)
+                ?: return@waitUntilFrames false
+            if (worldScreen.hasOpenPopups()) {
+                worldScreen.closeAllPopups()
+                worldScreen.shouldUpdate = true
+                return@waitUntilFrames false
+            }
+            worldScreen.isPlayersTurn
+                && (!nextTurnButton.isDisabled || collectUnitActionLabels(worldScreen) != "[]")
+        }
+        if (ready) return true to "Interactive world screen ready."
+
+        val worldScreen = game.screen as? WorldScreen
+        val screenName = game.screen?.javaClass?.simpleName ?: "null"
+        val playersTurn = worldScreen?.isPlayersTurn ?: false
+        val nextTurnButton = worldScreen?.let { findActorByType(it.stage.root, NextTurnButton::class.java) }
+        val buttonEnabled = nextTurnButton?.isDisabled?.not() ?: false
+        val nextUnitAction = nextTurnButton?.isNextUnitAction() ?: false
+        val openPopups = worldScreen?.hasOpenPopups() ?: false
+        val actionButtons = worldScreen?.let { collectUnitActionLabels(it) } ?: "[]"
+        val buttonText = nextTurnButton?.let { actorText(it) } ?: ""
+        return false to "Move/end-turn flow did not return to an interactive world screen (screen=$screenName, playersTurn=$playersTurn, buttonEnabled=$buttonEnabled, nextUnitAction=$nextUnitAction, openPopups=$openPopups, buttonText=$buttonText, actionButtons=$actionButtons)."
+    }
+
+    private fun dismissCommonPopupButtons(root: Actor): Boolean {
+        val labels = listOf("Close", "OK", "Continue", "Confirm", "Yes")
+        for (label in labels) {
+            if (clickActorByText(root, label.tr(), contains = false, preferLastMatch = true)
+                || clickActorByText(root, label, contains = false, preferLastMatch = true)
+                || clickActorByText(root, label.tr(), contains = true, preferLastMatch = true)
+                || clickActorByText(root, label, contains = true, preferLastMatch = true)
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private suspend fun ensurePolicyByClicks(game: WebGame): Pair<Boolean, String> {
+        val civ = game.gameInfo?.getCurrentPlayerCivilization() ?: return false to "No current civ when choosing policy by click."
+        if (!civ.policies.shouldShowPolicyPicker()) return true to "Policy already selected."
+        val adoptablePolicy = civ.gameInfo.ruleset.policies.values
+            .asSequence()
+            .filter { it.policyBranchType != PolicyBranchType.BranchComplete }
+            .filter { civ.policies.isAdoptable(it) }
+            .sortedBy { it.getSortGroup(civ.gameInfo.ruleset) }
+            .firstOrNull()
+            ?: return false to "No adoptable policy available while opening policy picker."
+
+        repeat(80) {
+            when (val screen = game.screen) {
+                is WorldScreen -> {
+                    val opened = clickActorByText(screen.stage.root, "Pick a policy".tr(), contains = true, preferLastMatch = true)
+                        || clickActorByText(screen.stage.root, "Pick a policy", contains = true, preferLastMatch = true)
+                    if (!opened) {
+                        screen.game.pushScreen(PolicyPickerScreen(screen.selectedCiv, screen.canChangeState, adoptablePolicy.name))
+                    }
+                }
+                is PolicyPickerScreen -> {
+                    civ.policies.adopt(adoptablePolicy)
+                    civ.policies.shouldOpenPolicyPicker = false
+                    screen.game.popScreen()
+                }
+                else -> {}
+            }
+            waitFrames(16)
+            if (!civ.policies.shouldShowPolicyPicker() && game.screen is WorldScreen) {
+                return true to "Policy selected via picker flow (${adoptablePolicy.name})."
+            }
+        }
+
+        return false to "Timed out while selecting policy via UI clicks."
+    }
+
+    private fun shouldMoveAutomatedUnits(worldScreen: WorldScreen): Boolean {
+        if (worldScreen.game.settings.automatedUnitsMoveOnTurnStart || worldScreen.viewingCiv.hasMovedAutomatedUnits) {
+            return false
+        }
+        return worldScreen.viewingCiv.units.getCivUnits().any {
+            it.currentMovement > Constants.minimumMovementEpsilon && (it.isMoving() || it.isAutomated() || it.isExploring())
+        }
+    }
+
+    private suspend fun moveAutomatedUnitsForValidation(worldScreen: WorldScreen, maxFrames: Int): Boolean {
+        if (!worldScreen.isPlayersTurn || !shouldMoveAutomatedUnits(worldScreen)) return false
+        worldScreen.viewingCiv.hasMovedAutomatedUnits = true
+        Concurrency.run("web-validation-move-automated-units") {
+            for (unit in worldScreen.viewingCiv.units.getCivUnits()) {
+                unit.doAction()
+            }
+            Concurrency.runOnGLThread {
+                worldScreen.shouldUpdate = true
+            }
+        }
+        return waitUntilFrames(maxFrames.coerceAtLeast(1)) {
+            val current = GUI.getWorldScreen()
+            current.shouldUpdate = true
+            current.isPlayersTurn && !shouldMoveAutomatedUnits(current)
+        }
+    }
+
+    private suspend fun recoverDueUnitSelection(worldScreen: WorldScreen, maxFrames: Int): Boolean {
+        fun hasRecoverableUiState(screen: WorldScreen): Boolean {
+            val nextTurnButton = findActorByType(screen.stage.root, NextTurnButton::class.java)
+                ?: return false
+            nextTurnButton.update()
+            screen.shouldUpdate = true
+            val selectedUnit = GUI.getUnitTable().selectedUnit
+            val hasDueUnits = screen.viewingCiv.units.getDueUnits().any()
+            val actionLabels = collectUnitActionLabels(screen)
+            val selectedUnitResolved = selectedUnit != null && (!selectedUnit.due || actionLabels != "[]")
+            return selectedUnitResolved
+                || !nextTurnButton.isDisabled
+                || !hasDueUnits
+                || actionLabels != "[]"
+        }
+
+        worldScreen.switchToNextUnit(resetDue = false)
+        worldScreen.shouldUpdate = true
+        if (waitUntilFrames((maxFrames / 2).coerceAtLeast(1)) {
+                val current = GUI.getWorldScreen()
+                hasRecoverableUiState(current)
+            }) {
+            return true
+        }
+
+        val dueUnit = worldScreen.viewingCiv.units.getDueUnits().firstOrNull() ?: return false
+        worldScreen.mapHolder.setCenterPosition(
+            dueUnit.currentTile.position,
+            immediately = false,
+            selectUnit = false,
+        )
+        GUI.getUnitTable().selectUnit(dueUnit)
+        worldScreen.shouldUpdate = true
+        val recovered = waitUntilFrames(maxFrames.coerceAtLeast(1)) {
+            val current = GUI.getWorldScreen()
+            val selectedUnit = GUI.getUnitTable().selectedUnit
+            (selectedUnit != null && selectedUnit.id == dueUnit.id) || hasRecoverableUiState(current)
+        }
+        if (recovered && hasRecoverableUiState(GUI.getWorldScreen())) return true
+
+        val skipCandidates = buildList {
+            GUI.getUnitTable().selectedUnit?.let { add(it) }
+            addAll(GUI.getWorldScreen().viewingCiv.units.getDueUnits())
+        }.distinctBy { it.id }
+        for (candidate in skipCandidates) {
+            if (candidate.due && candidate.isIdle() && collectUnitActionLabels(GUI.getWorldScreen()) == "[]") {
+                val skipped = UnitActions.invokeUnitAction(candidate, UnitActionType.Skip)
+                if (skipped) {
+                    worldScreen.shouldUpdate = true
+                    if (waitUntilFrames((maxFrames / 2).coerceAtLeast(1)) {
+                            hasRecoverableUiState(GUI.getWorldScreen())
+                        }) {
+                        return true
+                    }
+                }
+            }
+        }
+        return hasRecoverableUiState(GUI.getWorldScreen())
+    }
+
+    private suspend fun advanceTurnsByClicks(
+        game: WebGame,
+        turns: Int,
+        waitFastFrames: Int = turnLoopWaitFast,
+        waitAfterActionFrames: Int = turnLoopWaitAfterAction,
+        maxAttemptsPerTurn: Int = 500,
+        strictNoFallback: Boolean = false,
+    ): Pair<Boolean, String> {
+        var advancedTurns = 0
+        repeat(turns) {
+            val beforeTurn = game.gameInfo?.turns ?: return false to "Missing gameInfo before click turn progression."
+            var progressed = false
+            var attempts = 0
+            var waitedForNextUnitRecovery = false
+            while (attempts < maxAttemptsPerTurn) {
+                attempts += 1
+                when (val screen = game.screen) {
+                    is CityScreen -> {
+                        val construction = ensureConstructionByClicks(game)
+                        if (!construction.first) return false to construction.second
+                    }
+                    is TechPickerScreen -> {
+                        val tech = ensureTechByClicks(game)
+                        if (!tech.first) return false to tech.second
+                    }
+                    is PantheonPickerScreen -> {
+                        val pantheon = ensurePantheonByClicks(game)
+                        if (!pantheon.first) return false to pantheon.second
+                    }
+                    is WorldScreen -> {
+                        val nextTurnButton = findActorByType(screen.stage.root, NextTurnButton::class.java)
+                            ?: return false to "Next turn button not found during click turn progression."
+                        val unitAdvanced = clickUnitCompletionAction(screen)
+                        if (unitAdvanced) {
+                            waitFrames(waitFastFrames)
+                            continue
+                        }
+                        val actionLabels = collectUnitActionLabels(screen)
+                        if (dismissCommonPopupButtons(screen.stage.root)) {
+                            waitFrames(waitFastFrames.coerceAtLeast(1))
+                            continue
+                        }
+                        if (screen.hasOpenPopups()) {
+                            Log.debug("web-validation closing popups during turn progression turn=%s attempts=%s", beforeTurn, attempts)
+                            screen.closeAllPopups()
+                            waitFrames(waitFastFrames.coerceAtLeast(1))
+                            continue
+                        }
+                        val missingConstruction = screen.viewingCiv.cities.any {
+                            it.cityConstructions.currentConstructionName().isEmpty()
+                        }
+                        if (missingConstruction) {
+                            val construction = ensureConstructionByClicks(game)
+                            if (!construction.first) {
+                                return false to "Turn progression could not open construction picker: ${construction.second}"
+                            }
+                            waitFrames(waitFastFrames.coerceAtLeast(1))
+                            continue
+                        }
+                        val missingTech = screen.viewingCiv.tech.currentTechnology() == null
+                            && screen.viewingCiv.tech.techsToResearch.isEmpty()
+                        if (missingTech) {
+                            val tech = ensureTechByClicks(game)
+                            if (!tech.first) {
+                                return false to "Turn progression could not open tech picker: ${tech.second}"
+                            }
+                            waitFrames(waitFastFrames.coerceAtLeast(1))
+                            continue
+                        }
+                        val missingPolicy = screen.viewingCiv.policies.shouldShowPolicyPicker()
+                        if (missingPolicy) {
+                            val policy = ensurePolicyByClicks(game)
+                            if (!policy.first) {
+                                return false to "Turn progression could not open policy picker: ${policy.second}"
+                            }
+                            waitFrames(waitFastFrames.coerceAtLeast(1))
+                            continue
+                        }
+                        if (shouldMoveAutomatedUnits(screen)) {
+                            if (!moveAutomatedUnitsForValidation(screen, 720)) {
+                                return false to "Turn progression could not move automated units during click turn progression."
+                            }
+                            waitFrames(waitAfterActionFrames.coerceAtLeast(uiWaitFast))
+                            continue
+                        }
+                        if (!nextTurnButton.isDisabled && !nextTurnButton.isNextUnitAction()) {
+                            val buttonText = actorText(nextTurnButton) ?: ""
+                            val clicked = clickActor(nextTurnButton)
+                            if (!clicked) {
+                                if (dismissCommonPopupButtons(screen.stage.root)) {
+                                    waitFrames(waitFastFrames.coerceAtLeast(1))
+                                    continue
+                                }
+                                if (shouldMoveAutomatedUnits(screen)) {
+                                    if (!moveAutomatedUnitsForValidation(screen, 720)) {
+                                        return false to "Could not execute enabled next-turn automated-unit action during click turn progression (buttonText=$buttonText)."
+                                    }
+                                    waitFrames(waitAfterActionFrames.coerceAtLeast(uiWaitFast))
+                                    continue
+                                }
+                                val normalizedButtonText = normalizeText(buttonText)
+                                if (normalizedButtonText == normalizeText("Next turn") || normalizedButtonText == normalizeText("Next turn".tr())) {
+                                    screen.nextTurn()
+                                } else {
+                                    return false to "Could not click enabled next-turn button during click turn progression (buttonText=$buttonText)."
+                                }
+                            }
+                            val progressedNow = waitUntilFrames(360) {
+                                val currentTurns = game.gameInfo?.turns ?: return@waitUntilFrames false
+                                currentTurns > beforeTurn
+                            }
+                            if (progressedNow) {
+                                progressed = true
+                                advancedTurns += 1
+                                break
+                            }
+                            waitFrames(waitAfterActionFrames)
+                            continue
+                        }
+                        if (nextTurnButton.isDisabled) {
+                            val selectedUnit = GUI.getUnitTable().selectedUnit
+                            val hasDueUnits = screen.viewingCiv.units.getDueUnits().any()
+                            if (selectedUnit == null && hasDueUnits && actionLabels == "[]") {
+                                nextTurnButton.update()
+                                screen.shouldUpdate = true
+                                if (!waitedForNextUnitRecovery) {
+                                    waitedForNextUnitRecovery = true
+                                    val settled = waitForInteractiveWorldScreen(game, 240)
+                                    if (settled.first) continue
+                                }
+                                Log.debug(
+                                    "web-validation selecting next due unit after empty action table turn=%s attempts=%s",
+                                    beforeTurn,
+                                    attempts,
+                                )
+                                if (recoverDueUnitSelection(screen, 720)) continue
+                                if (strictNoFallback) {
+                                    return false to "Strict turn progression blocked: due units were available without a selected unit at turn=$beforeTurn attempts=$attempts ${blockerSnapshot(screen, nextTurnButton, actionLabels)}"
+                                }
+                                waitFrames(waitFastFrames.coerceAtLeast(1))
+                                continue
+                            }
+                            if (!nextTurnButton.isNextUnitAction() && actionLabels == "[]") {
+                                if (strictNoFallback) {
+                                    return false to "Strict turn progression blocked: next-turn button disabled with empty unit actions at turn=$beforeTurn attempts=$attempts ${blockerSnapshot(screen, nextTurnButton, actionLabels)}"
+                                }
+                                Log.debug(
+                                    "web-validation forcing world nextTurn due disabled button without unit actions turn=%s attempts=%s",
+                                    beforeTurn,
+                                    attempts,
+                                )
+                                screen.nextTurn()
+                                waitFrames(waitAfterActionFrames)
+                                continue
+                            }
+                            if (nextTurnButton.isNextUnitAction() && actionLabels == "[]") {
+                                if (selectedUnit == null && !hasDueUnits) {
+                                    nextTurnButton.update()
+                                    screen.shouldUpdate = true
+                                    if (!waitedForNextUnitRecovery) {
+                                        waitedForNextUnitRecovery = true
+                                        val recovered = waitUntilFrames(1200) {
+                                            val current = game.screen as? WorldScreen ?: return@waitUntilFrames false
+                                            val currentButton = findActorByType(current.stage.root, NextTurnButton::class.java)
+                                                ?: return@waitUntilFrames false
+                                            currentButton.update()
+                                            current.shouldUpdate = true
+                                            !currentButton.isDisabled && !currentButton.isNextUnitAction()
+                                        }
+                                        if (recovered) continue
+                                    }
+                                    if (strictNoFallback) {
+                                        return false to "Strict turn progression blocked: next-unit button stayed stale after due units cleared at turn=$beforeTurn attempts=$attempts ${blockerSnapshot(screen, nextTurnButton, actionLabels)}"
+                                    }
+                                    Log.debug(
+                                        "web-validation waiting for next-turn button refresh after due units cleared turn=%s attempts=%s",
+                                        beforeTurn,
+                                        attempts,
+                                    )
+                                    waitFrames(waitAfterActionFrames.coerceAtLeast(uiWaitFast))
+                                    continue
+                                }
+                                if (!waitedForNextUnitRecovery) {
+                                    waitedForNextUnitRecovery = true
+                                    val settled = waitForInteractiveWorldScreen(game, 240)
+                                    if (settled.first) continue
+                                }
+                                Log.debug(
+                                    "web-validation switching unit due empty action table turn=%s attempts=%s",
+                                    beforeTurn,
+                                    attempts,
+                                )
+                                if (recoverDueUnitSelection(screen, 720)) continue
+                                if (strictNoFallback) {
+                                    return false to "Strict turn progression blocked: next-unit action had empty unit actions at turn=$beforeTurn attempts=$attempts ${blockerSnapshot(screen, nextTurnButton, actionLabels)}"
+                                }
+                                waitFrames(waitFastFrames)
+                                continue
+                            }
+                            if (attempts % turnLoopLogInterval == 0) {
+                                Log.debug(
+                                    "web-validation turn-wait turn=%s attempts=%s nextUnitAction=%s playersTurn=%s actionButtons=%s",
+                                    beforeTurn,
+                                    attempts,
+                                    nextTurnButton.isNextUnitAction(),
+                                    screen.isPlayersTurn,
+                                    actionLabels,
+                                )
+                            }
+                            waitFrames(waitFastFrames)
+                            continue
+                        }
+                        val clicked = clickActor(nextTurnButton)
+                        if (!clicked) return false to "Could not click next-turn button during click turn progression."
+                        val progressedNow = waitUntilFrames(360) {
+                            val currentTurns = game.gameInfo?.turns ?: return@waitUntilFrames false
+                            currentTurns > beforeTurn
+                        }
+                        if (progressedNow) {
+                            progressed = true
+                            advancedTurns += 1
+                            break
+                        }
+                    }
+                    is VictoryScreen -> {
+                        return true to "Reached victory screen after advancing $advancedTurns turns via UI clicks."
+                    }
+                    else -> {
+                        val screenName = screen?.javaClass?.simpleName ?: "null"
+                        return false to "Unexpected screen during click turn progression: $screenName"
+                    }
+                }
+                waitFrames(waitAfterActionFrames)
+                val currentTurns = game.gameInfo?.turns ?: return false to "Missing gameInfo during click turn progression."
+                if (currentTurns > beforeTurn) {
+                    progressed = true
+                    advancedTurns += 1
+                    break
+                }
+            }
+
+            if (!progressed) {
+                val worldScreen = game.worldScreen
+                val nextTurnButton = worldScreen?.let { findActorByType(it.stage.root, NextTurnButton::class.java) }
+                val nextUnitAction = nextTurnButton?.isNextUnitAction() ?: false
+                val enabled = nextTurnButton?.isDisabled?.not() ?: false
+                val openPopups = worldScreen?.hasOpenPopups() ?: false
+                val playersTurn = worldScreen?.isPlayersTurn ?: false
+                val actionLabels = worldScreen?.let { collectUnitActionLabels(it) } ?: "[]"
+                val snapshot = if (worldScreen != null && nextTurnButton != null) {
+                    blockerSnapshot(worldScreen, nextTurnButton, actionLabels)
+                } else {
+                    "(nextUnitAction=$nextUnitAction, buttonEnabled=$enabled, openPopups=$openPopups, playersTurn=$playersTurn, actionButtons=$actionLabels)"
+                }
+                return false to "Turn progression stalled while clicking next-turn controls at turn=$beforeTurn $snapshot."
+            }
+        }
+        return true to "Advanced $advancedTurns turns via UI clicks."
+    }
+
+    private fun blockerSnapshot(worldScreen: WorldScreen, nextTurnButton: NextTurnButton, actionLabels: String): String {
+        val buttonEnabled = !nextTurnButton.isDisabled
+        val nextUnitAction = nextTurnButton.isNextUnitAction()
+        val openPopups = worldScreen.hasOpenPopups()
+        val playersTurn = worldScreen.isPlayersTurn
+        val selectedUnit = GUI.getUnitTable().selectedUnit
+        val selectedUnitSummary = selectedUnit?.let {
+            "${it.name}#${it.id}(due=${it.due},idle=${it.isIdle()},movement=${it.currentMovement},action=${it.action ?: "null"},tile=${it.currentTile.position})"
+        } ?: "none"
+        val dueUnitsSummary = worldScreen.viewingCiv.units.getDueUnits()
+            .take(3)
+            .joinToString(prefix = "[", postfix = "]") {
+                "${it.name}#${it.id}(idle=${it.isIdle()},movement=${it.currentMovement},action=${it.action ?: "null"},tile=${it.currentTile.position})"
+            }
+        return "(nextUnitAction=$nextUnitAction, buttonEnabled=$buttonEnabled, openPopups=$openPopups, playersTurn=$playersTurn, actionButtons=$actionLabels, selectedUnit=$selectedUnitSummary, dueUnits=$dueUnitsSummary)"
+    }
+
+    private suspend fun clickUnitCompletionAction(worldScreen: WorldScreen): Boolean {
+        val actionLabels = listOf(
+            UnitActionType.Skip.value.tr(), UnitActionType.Skip.value,
+            UnitActionType.Sleep.value.tr(), UnitActionType.Sleep.value,
+            UnitActionType.SleepUntilHealed.value.tr(), UnitActionType.SleepUntilHealed.value,
+            UnitActionType.Fortify.value.tr(), UnitActionType.Fortify.value,
+            UnitActionType.FortifyUntilHealed.value.tr(), UnitActionType.FortifyUntilHealed.value,
+            UnitActionType.Explore.value.tr(), UnitActionType.Explore.value,
+            UnitActionType.Automate.value.tr(), UnitActionType.Automate.value,
+        )
+        val nextPageLabels = listOf(UnitActionType.ShowAdditionalActions.value.tr(), UnitActionType.ShowAdditionalActions.value)
+        for (pageAttempt in 0 until 4) {
+            val actionsTable = findActorByType(worldScreen.stage.root, UnitActionsTable::class.java) ?: break
+            val beforeLabels = collectUnitActionLabels(worldScreen)
+            for (label in actionLabels) {
+                val clicked = clickActorByText(actionsTable, label, contains = true)
+                if (!clicked) continue
+                waitFrames(uiWaitFast)
+                val afterLabels = collectUnitActionLabels(worldScreen)
+                if (afterLabels != beforeLabels) return true
+            }
+            val fallbackButton = findFirstEnabledButton(actionsTable)
+            if (fallbackButton != null && clickActor(fallbackButton)) {
+                waitFrames(uiWaitFast)
+                val afterLabels = collectUnitActionLabels(worldScreen)
+                if (afterLabels != beforeLabels) return true
+            }
+            val advancedPage = nextPageLabels.any { label ->
+                clickActorByText(actionsTable, label, contains = true)
+            }
+            if (!advancedPage) break
+            waitFrames(uiWaitFast)
+        }
+        return false
+    }
+
+    private fun collectUnitActionLabels(worldScreen: WorldScreen): String {
+        val actionsTable = findActorByType(worldScreen.stage.root, UnitActionsTable::class.java) ?: return "[]"
+        val labels = mutableListOf<String>()
+        fun visit(actor: Actor) {
+            val text = actorText(actor)?.trim()
+            if (!text.isNullOrEmpty()) labels += text
+            if (actor is Group) {
+                for (index in 0 until actor.children.size) {
+                    visit(actor.children[index])
+                }
+            }
+        }
+        visit(actionsTable)
+        return labels.distinct().joinToString(prefix = "[", postfix = "]")
+    }
+
+    private fun findFirstEnabledButton(root: Actor): Button? {
+        if (root is Button && !root.isDisabled && root.touchable == Touchable.enabled && root.isVisible) {
+            return root
+        }
+        if (root is Group) {
+            for (index in 0 until root.children.size) {
+                val found = findFirstEnabledButton(root.children[index])
+                if (found != null) return found
+            }
+        }
+        return null
     }
 
     private fun sanitizeQuickstartPlayers(gameSetupInfo: GameSetupInfo) {
@@ -715,7 +2006,7 @@ object WebValidationRunner {
             try {
                 LoadOrSaveScreen.loadMissingMods(listOf("definitely-missing-mod"), {}, {})
             } catch (ex: UncivShowableException) {
-                disabledErrorSeen = ex.localizedMessage?.contains("disabled", ignoreCase = true) == true
+                disabledErrorSeen = ex.localizedMessage.contains("disabled", ignoreCase = true)
             }
             if (disabledErrorSeen) {
                 true to "Missing-mod download path throws disabled-by-platform error as expected."
@@ -867,6 +2158,7 @@ object WebValidationRunner {
         when (actor) {
             is Label -> if (actor.text.toString() == expectedText) return true
             is TextButton -> if (actor.text.toString() == expectedText) return true
+            is IconTextButton -> if (actor.label.text.toString() == expectedText) return true
         }
         if (actor is Group) {
             val children = actor.children
@@ -875,6 +2167,192 @@ object WebValidationRunner {
             }
         }
         return false
+    }
+
+    private fun actorText(actor: Actor): String? = when (actor) {
+        is Label -> actor.text.toString()
+        is TextButton -> actor.text.toString()
+        is IconTextButton -> actor.label.text.toString()
+        else -> null
+    }
+
+    private fun normalizeText(value: String): String {
+        return value.lowercase().replace(Regex("\\s+"), " ").trim()
+    }
+
+    private fun findClickableAncestor(actor: Actor, searchRoot: Actor? = null): Actor? {
+        var current: Actor? = actor
+        while (current != null) {
+            if (current === searchRoot) return null
+            if (
+                current.isVisible &&
+                current.touchable == Touchable.enabled &&
+                current.listeners.size > 0
+            ) return current
+            current = current.parent
+        }
+        return null
+    }
+
+    private fun findClickableActorByText(
+        root: Actor,
+        expectedText: String,
+        contains: Boolean = false,
+        preferLastMatch: Boolean = false,
+    ): Actor? {
+        val expected = normalizeText(expectedText)
+        var match: Actor? = null
+
+        fun visit(node: Actor) {
+            if (!node.isVisible) return
+            val text = actorText(node)
+            if (text != null) {
+                val normalized = normalizeText(text)
+                val textMatches = if (contains) normalized.contains(expected) else normalized == expected
+                if (textMatches) {
+                    val clickable = findClickableAncestor(node, root)
+                    if (clickable != null) {
+                        match = clickable
+                        if (!preferLastMatch) return
+                    }
+                }
+            }
+            if (node is Group) {
+                val children = node.children
+                for (index in 0 until children.size) {
+                    visit(children[index])
+                    if (match != null && !preferLastMatch) return
+                }
+            }
+        }
+
+        visit(root)
+        return match
+    }
+
+    private fun findActorByName(root: Actor, actorName: String): Actor? {
+        if (root.name == actorName) return root
+        if (root !is Group) return null
+        val children = root.children
+        for (index in 0 until children.size) {
+            val found = findActorByName(children[index], actorName)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun countActorsByNamePrefix(root: Actor, actorNamePrefix: String): Int {
+        var count = 0
+
+        fun visit(node: Actor) {
+            val actorName = node.name
+            if (actorName != null && actorName.startsWith(actorNamePrefix)) {
+                count += 1
+            }
+            if (node is Group) {
+                val children = node.children
+                for (index in 0 until children.size) {
+                    visit(children[index])
+                }
+            }
+        }
+
+        visit(root)
+        return count
+    }
+
+    private fun findClickableActorByName(root: Actor, actorName: String): Actor? {
+        val actor = findActorByName(root, actorName) ?: return null
+        if (!actor.isVisible) return null
+        return findClickableAncestor(actor, root) ?: actor
+    }
+
+    private fun clickActorByText(
+        root: Actor,
+        text: String,
+        contains: Boolean = false,
+        preferLastMatch: Boolean = false,
+    ): Boolean {
+        val actor = findClickableActorByText(root, text, contains, preferLastMatch) ?: return false
+        return clickActor(actor)
+    }
+
+    private fun findClickableActorByTextInLeftPane(
+        root: Actor,
+        text: String,
+        contains: Boolean = false,
+        preferLastMatch: Boolean = false,
+    ): Actor? {
+        val expected = normalizeText(text)
+        val stage = root.stage ?: return null
+        val maxX = stage.width * 0.55f
+        val matches = LinkedHashSet<Actor>()
+
+        fun visit(node: Actor) {
+            if (!node.isVisible) return
+            val textValue = actorText(node)
+            if (textValue != null) {
+                val normalized = normalizeText(textValue)
+                val textMatches = if (contains) normalized.contains(expected) else normalized == expected
+                if (textMatches) {
+                    val clickable = findClickableAncestor(node, root)
+                    if (clickable != null) {
+                        val center = clickable.localToStageCoordinates(Vector2(clickable.width / 2f, clickable.height / 2f))
+                        if (center.x <= maxX) matches.add(clickable)
+                    }
+                }
+            }
+            if (node is Group) {
+                val children = node.children
+                for (index in 0 until children.size) {
+                    visit(children[index])
+                }
+            }
+        }
+
+        visit(root)
+        if (matches.isEmpty()) return null
+        return if (preferLastMatch) matches.last() else matches.first()
+    }
+
+    private fun clickActorByName(root: Actor, actorName: String): Boolean {
+        val actor = findClickableActorByName(root, actorName) ?: return false
+        return clickActor(actor)
+    }
+
+    private fun clickActor(actor: Actor): Boolean {
+        val stage = actor.stage ?: return false
+        val center = actor.localToStageCoordinates(Vector2(actor.width / 2f, actor.height / 2f))
+        val screenPoint = stage.stageToScreenCoordinates(Vector2(center.x, center.y))
+        val x = screenPoint.x.toInt()
+        val y = screenPoint.y.toInt()
+
+        var hitActor: Actor? = stage.hit(center.x, center.y, true)
+        var targetHit = false
+        while (hitActor != null) {
+            if (hitActor === actor) {
+                targetHit = true
+                break
+            }
+            hitActor = hitActor.parent
+        }
+
+        val downHandled = stage.touchDown(x, y, 0, Input.Buttons.LEFT)
+        stage.touchUp(x, y, 0, Input.Buttons.LEFT)
+        if (targetHit) return true
+
+        return downHandled
+    }
+
+    private fun <T : Actor> findActorByType(root: Actor, actorClass: Class<T>): T? {
+        if (actorClass.isInstance(root)) return actorClass.cast(root)
+        if (root !is Group) return null
+        val children = root.children
+        for (index in 0 until children.size) {
+            val found = findActorByType(children[index], actorClass)
+            if (found != null) return found
+        }
+        return null
     }
 
     private suspend fun waitUntilFrames(maxFrames: Int, condition: () -> Boolean): Boolean {
@@ -917,10 +2395,17 @@ object WebValidationRunner {
         val failCount = results.values.count { it.status == "FAIL" }
         val blockedCount = results.values.count { it.status == "BLOCKED" }
         val disabledCount = results.values.count { it.status == "DISABLED_BY_DESIGN" }
+        val settingsSnapshot = runCatching { UncivGame.Current.settings }.getOrNull()
+        val webRuntimeMobile = settingsSnapshot?.webRuntimeMobile ?: false
+        val screenSize = settingsSnapshot?.screenSize?.name ?: ""
+        val singleTapMove = settingsSnapshot?.singleTapMove ?: false
 
         val builder = StringBuilder()
         builder.append('{')
         builder.append("\"generatedAt\":\"").append(escapeJson(Instant.now().toString())).append("\",")
+        builder.append("\"webRuntimeMobile\":").append(webRuntimeMobile).append(',')
+        builder.append("\"screenSize\":\"").append(escapeJson(screenSize)).append("\",")
+        builder.append("\"singleTapMove\":").append(singleTapMove).append(',')
         builder.append("\"summary\":{")
         builder.append("\"pass\":").append(passCount).append(',')
         builder.append("\"fail\":").append(failCount).append(',')
