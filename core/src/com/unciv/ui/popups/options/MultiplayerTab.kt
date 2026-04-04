@@ -23,7 +23,6 @@ import com.unciv.ui.components.widgets.UncivTextField
 import com.unciv.ui.popups.options.MultiplayerSelectBoxHelpers.RefreshSelectOptions
 import com.unciv.ui.popups.AuthPopup
 import com.unciv.ui.popups.Popup
-import com.unciv.utils.AppClipboard
 import com.unciv.utils.Concurrency
 import com.unciv.utils.launchOnGLThread
 import java.net.URI
@@ -97,7 +96,7 @@ internal class MultiplayerTab(
         val serverIpTable = Table()
 
         serverIpTable.add("Server address".toLabel().onClick {
-            AppClipboard.readTextPreferCached(onText = { multiplayerServerTextField.text = it.trim() })
+            multiplayerServerTextField.text = Gdx.app.clipboard.contents
         }).colspan(2).padBottom(Constants.defaultFontSize / 2.0f).row()
 
         val errorTextField = "".toLabel(Color.RED)

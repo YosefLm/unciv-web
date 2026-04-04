@@ -71,7 +71,6 @@ import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsTable
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapHolder
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapTileUpdater.updateTiles
 import com.unciv.utils.Concurrency
-import com.unciv.utils.AppClipboard
 import com.unciv.utils.debug
 import com.unciv.utils.launchOnGLThread
 import com.unciv.utils.launchOnThreadPool
@@ -429,43 +428,12 @@ class WorldScreen(
 
         mapHolder.resetArrows()
         if (UncivGame.Current.settings.showUnitMovements) {
-            val allUnits = gameInfo.civilizations.asSequence().flatMap { it.units.getCivUnits() }.toList()
-            val allAttacks = sequence {
-                for (unit in allUnits) {
-                    try {
-                        val source = unit.getTile().position
-                        val unitCiv = unit.civ
-                        for (attacked in unit.attacksSinceTurnStart)
-                            yield(Triple(unitCiv, source, attacked.toHexCoord()))
-                    } catch (_: Exception) {
-                        // Movement overlays are non-critical; skip malformed unit attack history entries.
-                    }
-                }
-                for (civInfo in gameInfo.civilizations) {
-                    for (attack in civInfo.attacksSinceTurnStart) {
-                        try {
-                            yield(Triple(civInfo, attack.source, attack.target))
-                        } catch (_: Exception) {
-                            // Movement overlays are non-critical; skip malformed civilization attack history entries.
-                        }
-                    }
-                }
-            }
+            val allUnits = gameInfo.civilizations.asSequence().flatMap { it.units.getCivUnits() }
+            val allAttacks = allUnits.map { unit -> unit.attacksSinceTurnStart.asSequence().map { attacked -> Triple(unit.civ, unit.getTile().position, attacked.toHexCoord()) } }.flatten() +
+                gameInfo.civilizations.asSequence().flatMap { civInfo -> civInfo.attacksSinceTurnStart.asSequence().map { Triple(civInfo, it.source, it.target) } }
             mapHolder.updateMovementOverlay(
-                allUnits.asSequence().filter {
-                    try {
-                        mapVisualization.isUnitPastVisible(it)
-                    } catch (_: Exception) {
-                        false
-                    }
-                },
-                allUnits.asSequence().filter {
-                    try {
-                        mapVisualization.isUnitFutureVisible(it)
-                    } catch (_: Exception) {
-                        false
-                    }
-                },
+                allUnits.filter(mapVisualization::isUnitPastVisible),
+                allUnits.filter(mapVisualization::isUnitFutureVisible),
                 allAttacks.filter { (attacker, source, target) -> mapVisualization.isAttackVisible(attacker, source, target) }
                         .map { (_, source, target) -> source to target }
             )
@@ -698,7 +666,7 @@ class WorldScreen(
                                 val cantUploadNewGamePopup = Popup(this@WorldScreen)
                                 cantUploadNewGamePopup.addGoodSizedLabel(message).row()
                                 cantUploadNewGamePopup.addButton("Copy to clipboard") {
-                                    AppClipboard.writeText(ex.stackTraceToString())
+                                    Gdx.app.clipboard.contents = ex.stackTraceToString()
                                 }
                                 cantUploadNewGamePopup.addCloseButton()
                                 cantUploadNewGamePopup.open()
@@ -882,13 +850,8 @@ class WorldScreen(
     fun autoSave() {
         waitingForAutosave = true
         shouldUpdate = true
-        val autoSaveJob = UncivGame.Current.files.autosaves.requestAutoSave(gameInfo, true)
-        autoSaveJob.invokeOnCompletion {
+        UncivGame.Current.files.autosaves.requestAutoSave(gameInfo, true).invokeOnCompletion {
             // only enable the user to next turn once we've saved the current one
-            waitingForAutosave = false
-            shouldUpdate = true
-        }
-        if (!PlatformCapabilities.current.backgroundThreadPools) {
             waitingForAutosave = false
             shouldUpdate = true
         }
