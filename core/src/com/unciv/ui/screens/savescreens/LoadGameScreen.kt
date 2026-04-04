@@ -148,7 +148,8 @@ class LoadGameScreen : LoadOrSaveScreen() {
 
     private fun Table.addLoadFromCustomLocationButton() {
         val loadFromCustomLocationButton = loadFromCustomLocation.toTextButton()
-        loadFromCustomLocationButton.onActivation {
+        loadFromCustomLocationButton.name = "load.custom_location"
+        loadFromCustomLocationButton.onClick {
             errorLabel.isVisible = false
             loadFromCustomLocationButton.setText(Constants.loading.tr())
             loadFromCustomLocationButton.disable()
