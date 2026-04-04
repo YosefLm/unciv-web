@@ -6,15 +6,20 @@ import com.badlogic.gdx.files.FileHandle
 import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.utils.GdxRuntimeException
 import com.badlogic.gdx.utils.JsonReader
+import com.badlogic.gdx.utils.JsonValue
 import com.badlogic.gdx.utils.SerializationException
 import com.unciv.UncivGame
 import com.unciv.json.fromJsonFile
 import com.unciv.json.json
+import com.unciv.json.WebJsonFallback
 import com.unciv.logic.BackwardCompatibility.migrateCivID
 import com.unciv.logic.GameInfo
 import com.unciv.logic.GameInfoPreview
 import com.unciv.logic.UncivShowableException
+import com.unciv.logic.civilization.CivilizationInfoPreview
+import com.unciv.logic.civilization.PlayerType
 import com.unciv.models.metadata.GameSettings
+import com.unciv.models.metadata.Player
 import com.unciv.models.metadata.doMigrations
 import com.unciv.models.metadata.isMigrationNecessary
 import com.unciv.models.ruleset.RulesetCache
@@ -179,19 +184,29 @@ class UncivFiles(
         if (ex != null) throw ex
     }
 
-    fun saveGame(game: GameInfo, gameName: String, saveCompletionCallback: (Exception?) -> Unit = ::rethrowIfNotNull): FileHandle {
+    fun saveGame(
+        game: GameInfo,
+        gameName: String,
+        portable: Boolean = false,
+        saveCompletionCallback: (Exception?) -> Unit = ::rethrowIfNotNull
+    ): FileHandle {
         val file = getSave(gameName)
-        saveGame(game, file, saveCompletionCallback)
+        saveGame(game, file, portable, saveCompletionCallback)
         return file
     }
 
     /**
      * Only use this with a [FileHandle] obtained by one of the methods of this class!
      */
-    fun saveGame(game: GameInfo, file: FileHandle, saveCompletionCallback: (Exception?) -> Unit = ::rethrowIfNotNull) {
+    fun saveGame(
+        game: GameInfo,
+        file: FileHandle,
+        portable: Boolean = false,
+        saveCompletionCallback: (Exception?) -> Unit = ::rethrowIfNotNull
+    ) {
         try {
             debug("Saving GameInfo %s to %s", game.gameId, file.path())
-            val string = gameInfoToString(game)
+            val string = gameInfoToString(game, portable = portable)
             file.writeString(string, false, Charsets.UTF_8.name())
             saveCompletionCallback(null)
         } catch (ex: Exception) {
@@ -217,6 +232,7 @@ class UncivFiles(
             json().toJson(game, file)
             saveCompletionCallback(null)
         } catch (ex: Exception) {
+            Log.error("Failed to save GameInfoPreview ${game.gameId} to ${file.path()}", ex)
             saveCompletionCallback(ex)
         }
     }
@@ -237,7 +253,7 @@ class UncivFiles(
         val saveLocation = game.customSaveLocation ?: UncivGame.Current.files.getLocalFile(gameName).path()
 
         try {
-            val data = gameInfoToString(game)
+            val data = gameInfoToString(game, portable = true)
             debug("Initiating UI to save GameInfo %s to custom location %s", game.gameId, saveLocation)
             saverLoader.saveGame(data, saveLocation,
                 { location ->
@@ -446,10 +462,14 @@ class UncivFiles(
                 throw IncompatibleGameInfoVersionException(onlyVersion.version, ex)
             } ?: throw UncivShowableException("The file data seems to be corrupted.")
 
+            WebJsonFallback.hydrateGameParameters(gameInfo, unzippedJson)
+            WebJsonFallback.hydrateGameInfoIfMissingCivilizations(gameInfo, unzippedJson)
+
             if (gameInfo.version > CompatibilityVersion.CURRENT_COMPATIBILITY_VERSION) {
                 // this means there wasn't an immediate error while serializing, but this version will cause other errors later down the line
                 throw IncompatibleGameInfoVersionException(gameInfo.version)
             }
+            WebJsonFallback.hydrateTileMapIfMissingTiles(gameInfo.tileMap, unzippedJson)
             gameInfo.setTransients()
             return gameInfo
         }
@@ -459,31 +479,126 @@ class UncivFiles(
          * @throws SerializationException
          */
         fun gameInfoPreviewFromString(gameData: String): GameInfoPreview {
-            val preview = json().fromJson(GameInfoPreview::class.java, Gzip.unzip(gameData))
+            val unzipped = Gzip.unzip(gameData)
+            val preview = if (PlatformCapabilities.current.backgroundThreadPools) {
+                json().fromJson(GameInfoPreview::class.java, unzipped)
+            } else {
+                runCatching { parseGameInfoPreviewWithoutReflection(unzipped) }
+                    .getOrElse { json().fromJson(GameInfoPreview::class.java, unzipped) }
+            }
             preview.migrateCivID()
             return preview
         }
 
-        /** Returns gzipped serialization of [game], optionally gzipped ([forceZip] overrides [saveZipped]) */
-        fun gameInfoToString(game: GameInfo, forceZip: Boolean? = null, updateChecksum: Boolean = false): String {
-            game.version = CompatibilityVersion.CURRENT_COMPATIBILITY_VERSION
+        private fun parseGameInfoPreviewWithoutReflection(rawJson: String): GameInfoPreview {
+            val root = JsonReader().parse(rawJson)
+            val preview = GameInfoPreview()
+            preview.gameId = root.getString("gameId", preview.gameId)
+            preview.currentPlayer = root.getString("currentPlayer", preview.currentPlayer)
+            preview.difficulty = root.getString("difficulty", preview.difficulty)
+            preview.currentTurnStartTime = root.getLong("currentTurnStartTime", preview.currentTurnStartTime)
+            preview.turns = root.getInt("turns", preview.turns)
 
-            if (!PlatformCapabilities.current.backgroundThreadPools) {
+            root.get("gameParameters")?.let { paramsNode ->
+                val parameters = preview.gameParameters
+                parameters.isOnlineMultiplayer = paramsNode.getBoolean("isOnlineMultiplayer", parameters.isOnlineMultiplayer)
+                parameters.baseRuleset = paramsNode.getString("baseRuleset", parameters.baseRuleset)
+                parameters.difficulty = paramsNode.getString("difficulty", parameters.difficulty)
+                parameters.speed = paramsNode.getString("speed", parameters.speed)
+                parameters.startingEra = paramsNode.getString("startingEra", parameters.startingEra)
+                parameters.anyoneCanSpectate = paramsNode.getBoolean("anyoneCanSpectate", parameters.anyoneCanSpectate)
+                parameters.minutesUntilSkipTurn = paramsNode.getInt("minutesUntilSkipTurn", parameters.minutesUntilSkipTurn)
+                parameters.minutesUntilForceResign = paramsNode.getInt("minutesUntilForceResign", parameters.minutesUntilForceResign)
+                parameters.minutesRecoveredPerTurn = paramsNode.getInt("minutesRecoveredPerTurn", parameters.minutesRecoveredPerTurn)
+                parameters.espionageEnabled = paramsNode.getBoolean("espionageEnabled", parameters.espionageEnabled)
+                parameters.nuclearWeaponsEnabled = paramsNode.getBoolean("nuclearWeaponsEnabled", parameters.nuclearWeaponsEnabled)
+
+                val victoryTypesNode = paramsNode.get("victoryTypes")
+                if (victoryTypesNode != null && victoryTypesNode.isArray) {
+                    parameters.victoryTypes = arrayListOf<String>().apply {
+                        for (item in victoryTypesNode) add(item.asString())
+                    }
+                }
+
+                val modsNode = paramsNode.get("mods")
+                if (modsNode != null && modsNode.isArray) {
+                    parameters.mods = LinkedHashSet<String>().apply {
+                        for (item in modsNode) add(item.asString())
+                    }
+                }
+
+                val playersNode = paramsNode.get("players")
+                if (playersNode != null && playersNode.isArray) {
+                    parameters.players = ArrayList<Player>(playersNode.size).apply {
+                        for (playerNode in playersNode) {
+                            add(
+                                Player(
+                                    chosenCiv = playerNode.getString("chosenCiv", ""),
+                                    playerType = parsePlayerType(playerNode.getString("playerType", PlayerType.AI.name)),
+                                    playerId = playerNode.getString("playerId", ""),
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            val civilizationsNode = root.get("civilizations")
+            if (civilizationsNode != null && civilizationsNode.isArray) {
+                preview.civilizations = mutableListOf<CivilizationInfoPreview>().apply {
+                    for (civNode in civilizationsNode) add(parseCivilizationPreview(civNode))
+                }
+            }
+
+            return preview
+        }
+
+        private fun parseCivilizationPreview(node: JsonValue): CivilizationInfoPreview {
+            val preview = CivilizationInfoPreview()
+            preview.civName = node.getString("civName", preview.civName)
+            preview.civID = node.getString("civID", preview.civID)
+            preview.playerId = node.getString("playerId", preview.playerId)
+            preview.playerMinutesBeforeForceResign = node.getInt("playerMinutesBeforeForceResign", preview.playerMinutesBeforeForceResign)
+            preview.playerType = parsePlayerType(node.getString("playerType", preview.playerType.name))
+            return preview
+        }
+
+        private fun parsePlayerType(raw: String?): PlayerType {
+            if (raw == null) return PlayerType.AI
+            return PlayerType.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: PlayerType.AI
+        }
+
+        /** Returns gzipped serialization of [game], optionally gzipped ([forceZip] overrides [saveZipped]) */
+        fun gameInfoToString(
+            game: GameInfo,
+            forceZip: Boolean? = null,
+            updateChecksum: Boolean = false,
+            portable: Boolean = false,
+        ): String {
+            val platformHasBackgroundPools = PlatformCapabilities.current.backgroundThreadPools
+            val gameToSerialize = if (portable && !platformHasBackgroundPools) game.clone() else game
+            gameToSerialize.version = CompatibilityVersion.CURRENT_COMPATIBILITY_VERSION
+
+            if (!platformHasBackgroundPools && !portable) {
                 val snapshotId = UUID.randomUUID().toString()
                 webSnapshotCache[snapshotId] = game.clone()
                 val snapshotToken = "$WEB_SNAPSHOT_PREFIX$snapshotId"
                 return if (forceZip ?: saveZipped) Gzip.zip(snapshotToken) else snapshotToken
             }
 
-            if (updateChecksum) game.checksum = game.calculateChecksum()
-            val plainJson = json().toJson(game)
+            if (updateChecksum) {
+                val checksum = game.calculateChecksum()
+                game.checksum = checksum
+                gameToSerialize.checksum = checksum
+            }
+            val plainJson = json().toJson(gameToSerialize)
 
             return if (forceZip ?: saveZipped) Gzip.zip(plainJson) else plainJson
         }
 
         /** Returns gzipped serialization of preview [game] */
         fun gameInfoToString(game: GameInfoPreview): String {
-            return Gzip.zip(json().toJson(game))
+            return Gzip.zip(json().toJson(game, GameInfoPreview::class.java))
         }
 
         private val charsForbiddenInFileNames = setOf('\\', '/', ':')
@@ -536,9 +651,11 @@ class Autosaves(val files: UncivFiles) {
     fun autoSave(gameInfo: GameInfo, nextTurn: Boolean = false) {
         // get GameSettings to check the maxAutosavesStored in the autoSave function
         val settings = files.getGeneralSettings()
+        // Web turn autosaves can stay fast/ephemeral, but lifecycle/menu autosaves must survive reloads.
+        val usePortableAutosave = !nextTurn && !PlatformCapabilities.current.backgroundThreadPools
 
         try {
-            files.saveGame(gameInfo, AUTOSAVE_FILE_NAME)
+            files.saveGame(gameInfo, AUTOSAVE_FILE_NAME, portable = usePortableAutosave)
         } catch (oom: OutOfMemoryError) {
             Log.error("Ran out of memory during autosave", oom)
             return  // not much we can do here
