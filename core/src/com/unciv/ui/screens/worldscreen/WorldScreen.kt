@@ -13,6 +13,7 @@ import com.unciv.view.GameView
 import com.unciv.logic.UncivShowableException
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.PlayerType
+import com.unciv.logic.civilization.managers.TurnManager
 import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.event.EventBus
 import com.unciv.logic.map.HexCoord
@@ -70,6 +71,7 @@ import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsTable
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapHolder
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapTileUpdater.updateTiles
 import com.unciv.utils.Concurrency
+import com.unciv.utils.AppClipboard
 import com.unciv.utils.debug
 import com.unciv.utils.launchOnGLThread
 import com.unciv.utils.launchOnThreadPool
@@ -197,6 +199,17 @@ class WorldScreen(
 
         // Don't select unit and change selectedCiv when centering as spectator
         mapHolder.setCenterPosition(tileToCenterOn, immediately = true, selectUnit = !viewingCiv.isSpectator())
+
+        if (Gdx.app.type == Application.ApplicationType.WebGL && gameInfo.turns == 0 && viewingCiv.isHuman()) {
+            val units = viewingCiv.units.getCivUnits().toList()
+            if (units.isNotEmpty() && units.all { it.currentMovement <= Constants.minimumMovementEpsilon }) {
+                for (unit in units) {
+                    unit.currentMovement = unit.getMaxMovement().toFloat()
+                    unit.attacksThisTurn = 0
+                    unit.due = true
+                }
+            }
+        }
 
         tutorialController.allTutorialsShowedCallback = { shouldUpdate = true }
 
@@ -416,12 +429,43 @@ class WorldScreen(
 
         mapHolder.resetArrows()
         if (UncivGame.Current.settings.showUnitMovements) {
-            val allUnits = gameInfo.civilizations.asSequence().flatMap { it.units.getCivUnits() }
-            val allAttacks = allUnits.map { unit -> unit.attacksSinceTurnStart.asSequence().map { attacked -> Triple(unit.civ, unit.getTile().position, attacked.toHexCoord()) } }.flatten() +
-                gameInfo.civilizations.asSequence().flatMap { civInfo -> civInfo.attacksSinceTurnStart.asSequence().map { Triple(civInfo, it.source, it.target) } }
+            val allUnits = gameInfo.civilizations.asSequence().flatMap { it.units.getCivUnits() }.toList()
+            val allAttacks = sequence {
+                for (unit in allUnits) {
+                    try {
+                        val source = unit.getTile().position
+                        val unitCiv = unit.civ
+                        for (attacked in unit.attacksSinceTurnStart)
+                            yield(Triple(unitCiv, source, attacked.toHexCoord()))
+                    } catch (_: Exception) {
+                        // Movement overlays are non-critical; skip malformed unit attack history entries.
+                    }
+                }
+                for (civInfo in gameInfo.civilizations) {
+                    for (attack in civInfo.attacksSinceTurnStart) {
+                        try {
+                            yield(Triple(civInfo, attack.source, attack.target))
+                        } catch (_: Exception) {
+                            // Movement overlays are non-critical; skip malformed civilization attack history entries.
+                        }
+                    }
+                }
+            }
             mapHolder.updateMovementOverlay(
-                allUnits.filter(mapVisualization::isUnitPastVisible),
-                allUnits.filter(mapVisualization::isUnitFutureVisible),
+                allUnits.asSequence().filter {
+                    try {
+                        mapVisualization.isUnitPastVisible(it)
+                    } catch (_: Exception) {
+                        false
+                    }
+                },
+                allUnits.asSequence().filter {
+                    try {
+                        mapVisualization.isUnitFutureVisible(it)
+                    } catch (_: Exception) {
+                        false
+                    }
+                },
                 allAttacks.filter { (attacker, source, target) -> mapVisualization.isAttackVisible(attacker, source, target) }
                         .map { (_, source, target) -> source to target }
             )
@@ -654,7 +698,7 @@ class WorldScreen(
                                 val cantUploadNewGamePopup = Popup(this@WorldScreen)
                                 cantUploadNewGamePopup.addGoodSizedLabel(message).row()
                                 cantUploadNewGamePopup.addButton("Copy to clipboard") {
-                                    Gdx.app.clipboard.contents = ex.stackTraceToString()
+                                    AppClipboard.writeText(ex.stackTraceToString())
                                 }
                                 cantUploadNewGamePopup.addCloseButton()
                                 cantUploadNewGamePopup.open()
@@ -770,6 +814,10 @@ class WorldScreen(
     }
 
     override fun render(delta: Float) {
+        if (Gdx.app.type == Application.ApplicationType.WebGL) {
+            mapHolder.ensureInteractionState()
+        }
+
         //  This is so that updates happen in the MAIN THREAD, where there is a GL Context,
         //    otherwise images will not load properly!
         if (shouldUpdate && resizeDeferTimer == null) {
@@ -838,8 +886,13 @@ class WorldScreen(
     fun autoSave() {
         waitingForAutosave = true
         shouldUpdate = true
-        UncivGame.Current.files.autosaves.requestAutoSave(gameInfo, true).invokeOnCompletion {
+        val autoSaveJob = UncivGame.Current.files.autosaves.requestAutoSave(gameInfo, true)
+        autoSaveJob.invokeOnCompletion {
             // only enable the user to next turn once we've saved the current one
+            waitingForAutosave = false
+            shouldUpdate = true
+        }
+        if (!PlatformCapabilities.current.backgroundThreadPools) {
             waitingForAutosave = false
             shouldUpdate = true
         }
