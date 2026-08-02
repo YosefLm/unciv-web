@@ -1,8 +1,8 @@
 package com.unciv.app.web;
 
-import com.github.xpenatan.gdx.backends.teavm.config.AssetFileHandle;
-import com.github.xpenatan.gdx.backends.teavm.config.TeaBuildConfiguration;
-import com.github.xpenatan.gdx.backends.teavm.config.TeaBuilder;
+import com.github.xpenatan.gdx.teavm.backends.shared.config.AssetFileHandle;
+import com.github.xpenatan.gdx.teavm.backends.shared.config.builder.TeaBuilder;
+import com.github.xpenatan.gdx.teavm.backends.web.config.backend.WebBackend;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -10,8 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
-import org.teavm.tooling.TeaVMTargetType;
-import org.teavm.tooling.TeaVMTool;
 import org.teavm.vm.TeaVMOptimizationLevel;
 
 final class BuildWebCommon {
@@ -31,28 +29,28 @@ final class BuildWebCommon {
         cleanupOutput(outputPath);
         ensureDirectory(resourcesPath);
 
-        TeaBuildConfiguration configuration = new TeaBuildConfiguration();
-        configuration.webappPath = outputPath.toString();
-        configuration.targetType = wasm ? TeaVMTargetType.WEBASSEMBLY_GC : TeaVMTargetType.JAVASCRIPT;
-        configuration.targetFileName = OUTPUT_NAME;
-        configuration.htmlTitle = "Unciv";
-        configuration.htmlWidth = 0;
-        configuration.htmlHeight = 0;
-        configuration.assetsPath.add(new AssetFileHandle(assetsPath.toString()));
-        configuration.reflectionListener = className -> REFLECTION_PREFIXES.stream().anyMatch(className::startsWith);
-
-        TeaBuilder.config(configuration);
-
-        TeaVMTool tool = new TeaVMTool();
-        tool.setMainClass(WebLauncher.class.getName());
-        tool.setOptimizationLevel(TeaVMOptimizationLevel.SIMPLE);
-        tool.setObfuscated(false);
+        WebBackend backend = new WebBackend()
+                .setWebAssembly(wasm)
+                .setHtmlTitle("Unciv")
+                .setHtmlWidth(0)
+                .setHtmlHeight(0)
+                .setGenerateIndexHtml(true)
+                .setCopyAssets(true)
+                .setCopyLoadingAsset(false)
+                .setWebappFolderName("webapp")
+                .setStartJettyAfterBuild(false);
+        TeaBuilder builder = new TeaBuilder(backend)
+                .addAssets(new AssetFileHandle(assetsPath.toString()));
+        builder.setMainClass(WebLauncher.class.getName())
+                .setOutputName(OUTPUT_NAME)
+                .setOptimizationLevel(TeaVMOptimizationLevel.SIMPLE)
+                .setObfuscated(false);
         if (!wasm) {
-            tool.setDebugInformationGenerated(true);
-            tool.setSourceMapsFileGenerated(true);
+            builder.setDebugInformationGenerated(true)
+                    .setSourceMapsFileGenerated(true);
         }
 
-        TeaBuilder.build(tool);
+        builder.build(outputPath.toFile());
         flattenWebapp(webappPath, outputPath);
     }
 
