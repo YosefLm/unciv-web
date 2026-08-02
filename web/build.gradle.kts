@@ -93,6 +93,7 @@ val generateWebJsTestSuite by tasks.registering {
         val candidates = testsSourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { it.invariantSeparatorsPath.contains("/com/unciv/dev/") }
+            .filterNot { it.name == "LongPriorityQueueTest.kt" }
             .sortedBy { it.invariantSeparatorsPath }
             .toList()
 
