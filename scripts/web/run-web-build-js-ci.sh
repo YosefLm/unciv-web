@@ -34,4 +34,3 @@ for attempt in $(seq 1 "$attempts"); do
   echo "[web-build] retrying in ${sleep_time}s..."
   sleep "$sleep_time"
 done
-

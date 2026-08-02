@@ -164,7 +164,9 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         ImageGetter.setNewRuleset(baseRuleset)
 
         initStep = "setup easter eggs"
-        if (game.settings.enableEasterEggs) {
+        // TeaVM's web target does not implement the random holiday selection used by the
+        // optional Easter-egg rulesets and artwork. Keep the web main menu deterministic.
+        if (game.settings.enableEasterEggs && Gdx.app.type != Application.ApplicationType.WebGL) {
             val holiday = HolidayDates.getHolidayByDate()
             if (holiday != null)
                 EasterEggFloatingArt(stage, holiday.name)

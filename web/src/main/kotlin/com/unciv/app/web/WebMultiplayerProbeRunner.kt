@@ -436,8 +436,8 @@ object WebMultiplayerProbeRunner {
     private fun toWebSocketBase(serverUrl: String): String {
         val trimmed = serverUrl.trim().trimEnd('/')
         return when {
-            trimmed.startsWith("https://") -> "wss://${trimmed.substringAfter("https://")}" 
-            trimmed.startsWith("http://") -> "ws://${trimmed.substringAfter("http://")}" 
+            trimmed.startsWith("https://") -> "wss://${trimmed.substringAfter("https://")}"
+            trimmed.startsWith("http://") -> "ws://${trimmed.substringAfter("http://")}"
             trimmed.startsWith("ws://") || trimmed.startsWith("wss://") -> trimmed
             else -> "ws://$trimmed"
         }

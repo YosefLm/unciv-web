@@ -60,10 +60,10 @@ public class WebLauncher {
         config.showDownloadLogs = true;
 
         if(jsTestsMode) {
-            new WebApplication(new WebJsTestsGame(), config);
+            new WebApplication(new WebJsTestsGame(), new WebAssetPreloadApplicationListener(), config);
             return;
         }
-        new WebApplication(new WebGame(), config);
+        new WebApplication(new WebGame(), new WebAssetPreloadApplicationListener(), config);
     }
 
     private static WebProfile resolveWebProfile() {

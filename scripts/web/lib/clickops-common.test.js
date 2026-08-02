@@ -73,4 +73,3 @@ test('waitForClickOpsStart tolerates the bootstrap-start placeholder before clic
     assert.ok(true);
   });
 });
-
