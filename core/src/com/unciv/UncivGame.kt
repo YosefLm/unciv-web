@@ -512,6 +512,20 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         return if (screen == worldScreen) worldScreen else null
     }
 
+    fun requestExit() {
+        if (Gdx.app.type != Application.ApplicationType.WebGL) {
+            Gdx.app.exit()
+            return
+        }
+        val currentScreen = getScreen() ?: return
+        if (currentScreen is MainMenuScreen) return
+        if (screenStack.any { it is WorldScreen }) {
+            goToMainMenu()
+            return
+        }
+        replaceCurrentScreen(MainMenuScreen())
+    }
+
     fun goToMainMenu(): MainMenuScreen {
         val curGameInfo = gameInfo
         if (curGameInfo != null) {

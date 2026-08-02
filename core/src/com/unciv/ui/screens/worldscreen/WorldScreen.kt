@@ -814,10 +814,6 @@ class WorldScreen(
     }
 
     override fun render(delta: Float) {
-        if (Gdx.app.type == Application.ApplicationType.WebGL) {
-            mapHolder.ensureInteractionState()
-        }
-
         //  This is so that updates happen in the MAIN THREAD, where there is a GL Context,
         //    otherwise images will not load properly!
         if (shouldUpdate && resizeDeferTimer == null) {
