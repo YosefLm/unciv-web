@@ -38,7 +38,7 @@ class WorldScreenMenuPopup(
         val firstCell = addButton("Main menu") {
             worldScreen.game.goToMainMenu()
         }
-        singleColumn = worldScreen.useResponsiveCompactLayout() ||
+        singleColumn = worldScreen.isCrampedPortrait() ||
             2 * prefWidth > maxPopupWidth ||  // Very coarse: Assume width of translated "Main menu" is representative
             buttonCount * (prefHeight - emptyPrefHeight) + emptyPrefHeight < maxPopupHeight
         firstCell.nextColumn()
