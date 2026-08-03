@@ -1389,6 +1389,31 @@ object WebValidationRunner {
                 || actionLabels != "[]"
         }
 
+        // TeamVM can expose an idle worker as due while the GDX unit table has
+        // no selected actor yet. In that state the NextTurnButton is disabled
+        // in its "next unit" mode, so waiting for a clickable action can never
+        // make progress. Completing the idle units directly is the same action
+        // the visible Skip button would dispatch once the table is populated.
+        val idleDueUnits = worldScreen.viewingCiv.units.getDueUnits()
+            .filter { it.isIdle() }
+            .toList()
+        var skippedIdleDueUnit = false
+        for (unit in idleDueUnits) {
+            if (UnitActions.invokeUnitAction(unit, UnitActionType.Skip)) {
+                skippedIdleDueUnit = true
+            }
+        }
+        if (skippedIdleDueUnit) {
+            worldScreen.shouldUpdate = true
+            if (waitUntilFrames(maxFrames.coerceAtLeast(1)) {
+                    val current = GUI.getWorldScreen()
+                    current.shouldUpdate = true
+                    hasRecoverableUiState(current)
+                }) {
+                return true
+            }
+        }
+
         worldScreen.switchToNextUnit(resetDue = false)
         worldScreen.shouldUpdate = true
         if (waitUntilFrames((maxFrames / 2).coerceAtLeast(1)) {
