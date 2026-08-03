@@ -10,6 +10,7 @@ import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.multiplayer.Multiplayer
 import com.unciv.platform.PlatformCapabilities
+import com.unciv.platform.PlatformRuntime
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.skins.SkinCache
@@ -38,7 +39,6 @@ import com.unciv.utils.*
 import kotlinx.coroutines.CancellationException
 import yairm210.purity.annotations.Readonly
 import java.io.PrintWriter
-import java.lang.management.ManagementFactory
 import java.util.*
 import kotlin.collections.ArrayDeque
 import kotlin.collections.asSequence
@@ -475,7 +475,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         return mainMenuScreen
     }
 
-    override fun getGcCount(): Int = ManagementFactory.getGarbageCollectorMXBeans().sumOf { it.collectionCount }.toInt()
+    override fun getGcCount(): Int = PlatformRuntime.gcCount()
 
     companion object {
         //region AUTOMATICALLY GENERATED VERSION DATA - DO NOT CHANGE THIS REGION, INCLUDING THIS COMMENT

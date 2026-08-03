@@ -19,6 +19,8 @@ import com.unciv.models.metadata.GameSettings.ScreenSize
 import com.unciv.models.metadata.ModCategories
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.platform.PlatformCapabilities
+import com.unciv.platform.PlatformCoroutineContext
+import com.unciv.platform.platformFlowOn
 import com.unciv.models.translations.TranslationFileWriter
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
@@ -55,7 +57,6 @@ import kotlinx.coroutines.Dispatchers
 import java.util.zip.Deflater
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlin.io.path.exists
 import kotlin.io.path.extension
 import kotlin.io.path.isDirectory
@@ -183,7 +184,7 @@ internal class AdvancedTab(
                     file.path()
                 ))
             }
-        }.flowOn(Dispatchers.IO)
+        }.platformFlowOn(PlatformCoroutineContext.io())
 
         /** Build provider for [addAsyncSelectBox]: default, mods, system */
         fun loadFonts() = flow {
@@ -200,7 +201,7 @@ internal class AdvancedTab(
                 for (font in Fonts.getSystemFonts())
                     emit(font)
             }
-        }.flowOn(Dispatchers.IO)
+        }.platformFlowOn(PlatformCoroutineContext.io())
 
         addAsyncSelectBox("Font family", settings::fontFamilyData, ::loadFonts) { reloadWorldAndOptions() }
     }

@@ -1,6 +1,7 @@
 package com.unciv.models.metadata
 
 import com.unciv.UncivGame
+import com.unciv.platform.PlatformLocale
 import yairm210.purity.annotations.Cache
 import yairm210.purity.annotations.Readonly
 import java.text.NumberFormat
@@ -83,7 +84,7 @@ enum class LocaleCode(
     Zulu("zu-ZA")
     ;
 
-    @Readonly fun locale(): Locale = Locale.forLanguageTag(languageTag)
+    @Readonly fun locale(): Locale = PlatformLocale.fromLanguageTag(languageTag)
     @Readonly fun fastlaneFolder(): String = this.fastlaneFolder ?: locale().language
     @Readonly fun languageName(): String = this.languageName ?: name
 

@@ -321,7 +321,7 @@ internal interface OptionsPopupHelpers {
      */
     fun reopenOptions(force: Boolean = false) {
         Concurrency.run("Reload from options") {
-            delay((if (force) 0 else 100).milliseconds)
+            delayMillis(if (force) 0 else 100)
             withGLContext {
                 val screen = UncivGame.Current.screen ?: return@withGLContext
                 if (force && screen.activePopup is OptionsPopup) screen.activePopup!!.close()

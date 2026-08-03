@@ -10,6 +10,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.scenes.scene2d.utils.FocusListener
 import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.keyShortcuts
+import com.unciv.platform.PlatformTextInput
 
 /**
  * Creates a text field with two deviations from the default Gdx [TextField]:
@@ -39,7 +40,7 @@ open class TextFieldWithFixes private constructor(text: String, style: TextField
         addListener(object : FocusListener() {
             override fun keyboardFocusChanged(event: FocusEvent, actor: Actor?, focused: Boolean) {
                 if (!focused && event.relatedActor is TextFieldWithFixes) return // Will be reactivated anyway
-                onscreenKeyboard.show(focused)
+                PlatformTextInput.setKeyboardVisible(onscreenKeyboard, focused)
             }
         })
         setPasswordCharacter('\u2022') // Gdx bug: They use 149, which is a bullet in cp-1252, but not in a sensible encoding
@@ -52,7 +53,7 @@ open class TextFieldWithFixes private constructor(text: String, style: TextField
     }
 
     override fun setDisabled(disabled: Boolean) {
-        onscreenKeyboard.show(!disabled)
+        PlatformTextInput.setKeyboardVisible(onscreenKeyboard, !disabled)
         super.setDisabled(disabled)
     }
 
