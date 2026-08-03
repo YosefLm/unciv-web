@@ -71,7 +71,7 @@ class Multiplayer {
     suspend fun resignPlayer(
         game: MultiplayerGamePreview,
         playerCivName: String,
-        responsibleCivNameOrPlayerId: String
+        responsibleCivNameOrPlayerId: String = ""
     ): String {
         val preview = game.preview ?: throw game.error!!
         val gameInfo = multiplayerServer.tryDownloadGame(preview.gameId)
@@ -101,7 +101,7 @@ class Multiplayer {
     suspend fun skipCurrentPlayerTurn(
         game: MultiplayerGamePreview,
         player: String,
-        responsibleCivNameOrPlayerId: String
+        responsibleCivNameOrPlayerId: String = ""
     ): String? {
         val preview = game.preview ?: return game.error?.message
         val gameInfo = try {
