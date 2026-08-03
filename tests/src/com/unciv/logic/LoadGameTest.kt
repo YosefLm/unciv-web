@@ -52,7 +52,7 @@ class LoadGameTest {
         val data = UncivFiles.gameInfoToString(preview)
         val previousCapabilities = PlatformCapabilities.current
         try {
-            PlatformCapabilities.setCurrent(PlatformCapabilities.webPhase4Full())
+            PlatformCapabilities.setCurrent(PlatformCapabilities.Features(backgroundThreadPools = false))
             val roundTrip = UncivFiles.gameInfoPreviewFromString(data)
             Assert.assertEquals(preview.gameId, roundTrip.gameId)
             Assert.assertEquals(preview.currentPlayer, roundTrip.currentPlayer)

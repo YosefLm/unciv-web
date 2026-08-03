@@ -138,7 +138,7 @@ class GameSerializationTests {
     fun checksumUsesTeavmSafeFallbackWithoutBackgroundPools() {
         val previousCapabilities = PlatformCapabilities.current
         try {
-            PlatformCapabilities.setCurrent(PlatformCapabilities.webPhase4Full())
+            PlatformCapabilities.setCurrent(PlatformCapabilities.Features(backgroundThreadPools = false))
             val expected = serializedBytesWithoutChecksum().fold(0xcbf29ce484222325uL) { hash, byte ->
                 (hash xor (byte.toInt() and 0xff).toULong()) * 0x100000001b3uL
             }.toString(16).padStart(16, '0')

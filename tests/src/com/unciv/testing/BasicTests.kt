@@ -330,7 +330,7 @@ class BasicTests {
     fun webCollatorFallbackIsNullSafeAndCaseInsensitive() {
         val previousCapabilities = com.unciv.platform.PlatformCapabilities.current
         try {
-            com.unciv.platform.PlatformCapabilities.setCurrent(com.unciv.platform.PlatformCapabilities.webPhase4Full())
+            com.unciv.platform.PlatformCapabilities.setCurrent(com.unciv.platform.PlatformCapabilities.Features(backgroundThreadPools = false))
             val settings = GameSettings().apply {
                 language = Constants.english
                 updateLocaleFromLanguage()
