@@ -111,6 +111,7 @@ Only mark a segment mergeable after its own gate and every inherited gate pass. 
 - The final current tree passes `.rebuild-backup/web-final-gates-r3.log`: latest TeamVM `:web:webBuildJs`, 8,250 classes, WAR preload verification for all three WAR fixtures, and `BUILD SUCCESSFUL`.
 - The final Node contract run is 22/22. The browser JS suite is 240 executed, 0 failures, 18 explicit TeamVM-only exclusions, 0 page errors, and 0 console errors. Phase-4 desktop and mobile each report 12 pass, 0 fail, 0 blocked, 0 disabled, 0 page errors, and 0 console errors in `phase4-desktop-final-r5` and `phase4-mobile-final-r5`.
 - Final dedicated flows pass: file I/O, UI multiplayer, multi-instance turn/chat synchronization, strict clickops, WAR-from-start, WAR-preworld, and WAR-deep. The local Pages staging smoke remains recorded in `pages-smoke-site-r2` and the final WAR/browser outputs are recorded in `tasks.csv`.
+- After the ABI correction, current-ref TeamVM web builds were rerun on S01-S05 and all passed (`.rebuild-backup/web-final-01-*` through `.rebuild-backup/web-final-05-*`), closing the early-branch evidence gap.
 
 ### Fixes found during the final audit
 
