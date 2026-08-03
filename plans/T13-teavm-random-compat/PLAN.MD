@@ -92,3 +92,12 @@ The strict multiplayer flow then exposed two more web-only failures: a local Ind
 ## Completion criteria
 
 Only mark a segment mergeable after its own gate and every inherited gate pass. The final segment is complete only when the exact JVM branch-vs-clean-upstream regression suite, all web gates, all six final phase-4 flows, file/mod behavior, multiplayer behavior, WAR-from-start/preworld/deep, and Pages smoke are recorded as passing in `tasks.csv`.
+
+## Local completion evidence (2026-08-03)
+
+- The full local branch chain was rebuilt from `f2e3017b77ad9c7dda04549b1e8e7ddaddbdccf5`; every child was rebased onto its immediately preceding child and all ancestry checks are clean.
+- The clean upstream checkout and every stack branch pass `./gradlew classes check --no-build-cache cleanTest test tests:test` with the fixed JDK 22 runtime. The one randomized upstream `QuestTests.testAlternativeBarbarianCampsAreUsed` failure reproduced once on the final branch and passed on the required rerun; it was not a web-code failure.
+- Branch 11 received the owning compile fixes for the generated browser suite (`EditorMapHolderMemoryTest` exclusion and `CityView` construction), then the idle-due-worker recovery in `WebValidationRunner`. Branches 12 and 13 were rebased after each fix and rerun.
+- Final TeamVM build passes with 8,251 classes and verifies `war-from-start`, `war-preworld`, and `war-deep`. The web-only `ThreadLocalRandom` overlay, JSON hydration fallback, portable file diagnostics, EventBus reflection guard, and multiplayer persistence retry remain outside JVM behavior.
+- Final phase-4 desktop and mobile both report 12 pass, 0 fail, 0 blocked, 0 disabled, 0 page errors, and 0 console errors. The JS suite reports 240 executed, 18 explicit TeamVM-only exclusions, 0 failures, 0 page errors, and 0 console errors.
+- Dedicated file I/O, UI multiplayer, multi-instance turn/chat synchronization, strict clickops, WAR-from-start, WAR-preworld, WAR-deep, and a local Pages staging smoke all pass. Exact evidence paths and branch SHAs are in `tasks.csv`.
