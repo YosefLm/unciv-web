@@ -17,7 +17,7 @@ const source = fs.readFileSync(
 );
 
 test("phase-one capability profile disables every unsupported web service", () => {
-  const phaseOne = source.match(/fun webPhase1\(\): Features = Features\(([^)]*)\)/s)?.[1] ?? "";
+  const phaseOne = source.match(/fun webPhase1\(\)(?:\s*:\s*Features)?\s*=\s*Features\(([^)]*)\)/s)?.[1] ?? "";
 
   assert.match(phaseOne, /onlineMultiplayer\s*=\s*false/);
   assert.match(phaseOne, /customFileChooser\s*=\s*false/);
