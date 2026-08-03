@@ -20,6 +20,9 @@ sourceSets {
         java.srcDir("../tests/src")
         java.srcDir(generatedWebJsTestsDir)
         java.exclude("com/unciv/dev/**")
+        // This test imports desktop-only editor classes and is covered by the
+        // JVM test source set, not by the browser-generated suite.
+        java.exclude("com/unciv/ui/components/tilegroups/EditorMapHolderMemoryTest.kt")
         java.exclude("com/unciv/testing/GdxTestRunner.kt")
         java.exclude("com/unciv/testing/GdxTestRunnerFactory.kt")
         java.srcDir("../tests/src")
@@ -93,6 +96,7 @@ val generateWebJsTestSuite by tasks.registering {
         val candidates = testsSourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .filterNot { it.invariantSeparatorsPath.contains("/com/unciv/dev/") }
+            .filterNot { it.name == "EditorMapHolderMemoryTest.kt" }
             .filterNot { it.name == "LongPriorityQueueTest.kt" }
             .sortedBy { it.invariantSeparatorsPath }
             .toList()

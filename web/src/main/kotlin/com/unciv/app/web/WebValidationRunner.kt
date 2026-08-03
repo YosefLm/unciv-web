@@ -53,6 +53,7 @@ import com.unciv.ui.screens.savescreens.LoadOrSaveScreen
 import com.unciv.ui.screens.savescreens.SaveGameScreen
 import com.unciv.ui.screens.victoryscreen.VictoryScreen
 import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.view.CityView
 import com.unciv.ui.screens.worldscreen.status.NextTurnButton
 import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsTable
 import com.unciv.ui.screens.worldscreen.unit.actions.UnitActions
@@ -866,7 +867,7 @@ object WebValidationRunner {
                         val city = civ.cities.firstOrNull { it.cityConstructions.currentConstructionName().isEmpty() }
                             ?: civ.cities.firstOrNull()
                             ?: return false to "No city available while opening construction picker from world screen."
-                        screen.game.pushScreen(CityScreen(city))
+                        screen.game.pushScreen(CityScreen(CityView(city, civ)))
                     }
                 }
                 else -> {}
