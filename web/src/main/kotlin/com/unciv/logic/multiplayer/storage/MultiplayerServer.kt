@@ -129,7 +129,15 @@ class MultiplayerServer(
     }
 
     suspend fun uploadGame(gameInfo: GameInfo, withPreview: Boolean) {
-        val zippedGameInfo = UncivFiles.gameInfoToString(gameInfo, forceZip = true, updateChecksum = true)
+        // A WEBSNAP token is intentionally local to one browser instance and
+        // cannot be uploaded for another player to download. Multiplayer
+        // storage must use the portable web JSON path.
+        val zippedGameInfo = UncivFiles.gameInfoToString(
+            gameInfo,
+            forceZip = true,
+            updateChecksum = true,
+            portable = true,
+        )
         saveFile(gameInfo.gameId, zippedGameInfo)
         if (withPreview) {
             tryUploadGamePreview(gameInfo.asPreview())

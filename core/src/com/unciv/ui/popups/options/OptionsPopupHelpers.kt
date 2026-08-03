@@ -34,7 +34,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlin.reflect.KMutableProperty0
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  *  Helper library for [OptionsPopup] and its tabs.

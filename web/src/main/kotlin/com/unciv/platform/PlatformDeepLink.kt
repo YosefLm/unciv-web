@@ -1,7 +1,8 @@
 package com.unciv.platform
 
+import com.unciv.app.web.WebDeepLinkInterop
 
-/** Small browser URL parser for the deep-link shape consumed by IdChecker. */
+/** Small web URL parser for the only deep-link shape consumed by IdChecker. */
 fun parseUncivDeepLink(url: String): DeepLinkParts? {
     val rawPath = url.substringBefore('?').substringBefore('#')
     val uncivPathStart = rawPath.indexOf("/Unciv/", ignoreCase = true)
@@ -15,6 +16,7 @@ fun parseUncivDeepLink(url: String): DeepLinkParts? {
     val name = query.split('&')
         .firstOrNull { it.substringBefore('=') == "name" }
         ?.substringAfter('=', "")
+        ?.let(WebDeepLinkInterop::decodeURIComponent)
         .orEmpty()
     return DeepLinkParts(segments, name)
 }

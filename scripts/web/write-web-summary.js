@@ -134,7 +134,7 @@ function main() {
   }
 
   if (multiplayer) {
-    lines.push('### Multiplayer Multi-Instance (informational probe)');
+    lines.push('### Multiplayer Multi-Instance (required gate)');
     lines.push(`- status: ${multiplayer.status || 'UNKNOWN'}`);
     lines.push(`- game_id: ${multiplayer.gameId || 'unknown'}`);
     lines.push(`- browser: ${multiplayer.browser || 'chromium'}`);
@@ -172,7 +172,7 @@ function main() {
   }
 
   if (uiMultiplayer) {
-    lines.push('### UI Multiplayer (30s, informational probe)');
+    lines.push('### UI Multiplayer (30s, required gate)');
     lines.push(`- status: ${uiMultiplayer.status || 'UNKNOWN'}`);
     lines.push(`- run_id: ${uiMultiplayer.runId || 'unknown'}`);
     lines.push(`- host_passed: ${uiMultiplayer.host?.passed === true ? 'yes' : 'no'}`);

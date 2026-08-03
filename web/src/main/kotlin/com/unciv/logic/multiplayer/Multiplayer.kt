@@ -9,6 +9,8 @@ import com.unciv.logic.multiplayer.storage.MultiplayerServer
 import com.unciv.ui.components.extensions.isLargerThan
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
@@ -60,12 +62,44 @@ class Multiplayer {
 
     suspend fun addGame(gameId: String, gameName: String? = null) {
         val saveFileName = if (gameName.isNullOrBlank()) gameId else gameName
-        val gamePreview: GameInfoPreview = try {
+        var gamePreview: GameInfoPreview = try {
             multiplayerServer.tryDownloadGamePreview(gameId)
         } catch (_: MultiplayerFileNotFoundException) {
             multiplayerServer.tryDownloadGame(gameId).asPreview()
+        } catch (_: Exception) {
+            // Some older/custom servers have a preview that the web JSON path
+            // cannot decode. The full portable game payload is authoritative
+            // and already has the web compatibility hydration path.
+            multiplayerServer.tryDownloadGame(gameId).asPreview()
         }
-        multiplayerFiles.addGame(gamePreview, saveFileName)
+        if (gamePreview.gameId.isBlank()) {
+            gamePreview = multiplayerServer.tryDownloadGame(gameId).asPreview()
+        }
+        saveLocalPreviewWhenReady(gamePreview, saveFileName)
+    }
+
+    /**
+     * TeamVM's IndexedDB-backed Files.local storage is opened asynchronously.
+     * On a fresh browser origin the first write can therefore observe the
+     * backend before its database handle exists. Keep this retry web-only so
+     * JVM/Android file semantics remain unchanged.
+     */
+    private suspend fun saveLocalPreviewWhenReady(preview: GameInfoPreview, saveFileName: String) {
+        var lastFailure: Exception? = null
+        repeat(50) { attempt ->
+            try {
+                multiplayerFiles.addGame(preview, saveFileName)
+                return
+            } catch (failure: Exception) {
+                lastFailure = failure
+                if (attempt < 49) waitForLocalStorage(100)
+            }
+        }
+        throw lastFailure ?: IllegalStateException("Web local multiplayer storage did not become ready")
+    }
+
+    private suspend fun waitForLocalStorage(delayMillis: Int) = suspendCoroutine<Unit> { continuation ->
+        WebMultiplayerDelay.schedule(Runnable { continuation.resume(Unit) }, delayMillis)
     }
 
     suspend fun resignPlayer(

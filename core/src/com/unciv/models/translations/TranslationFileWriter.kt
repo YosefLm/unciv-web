@@ -33,6 +33,7 @@ import com.unciv.models.ruleset.tech.TechColumn
 import com.unciv.models.ruleset.tile.Terrain
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.tile.TileResource
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.DeprecatedUniqueType
 import com.unciv.models.ruleset.unique.Unique
@@ -69,7 +70,7 @@ object TranslationFileWriter {
     private fun BaseRuleset.jsonFolder() = if (UncivGame.isCurrentInitialized())
             UncivGame.Current.files.getLocalFile(jsonFolderName())
         else Gdx.app.files.local(jsonFolderName())
-    private fun defaultFileFilter(file: File) = file.name.endsWith(".json", true)
+    private fun defaultFileFilter(file: FileHandle) = file.name().endsWith(".json", true)
 
     //region Update translation files
     fun writeNewTranslationFiles(modSelection: String): String {
@@ -190,7 +191,7 @@ object TranslationFileWriter {
             }
 
             // Global Tutorials reside one level above the base rulesets - if we had only per-ruleset tutorials the following lines would be unnecessary
-            val tutorialStrings = GenerateStringsFromJSONs(UncivGame.Current.files.getLocalFile("jsons")) { it.name == "Tutorials.json" }
+                val tutorialStrings = GenerateStringsFromJSONs(UncivGame.Current.files.getLocalFile("jsons")) { it.name() == "Tutorials.json" }
             fileNameToGeneratedStrings["Global Tutorials"] = tutorialStrings.values.first()
         } else {
             fileNameToGeneratedStrings.putAll(GenerateStringsFromJSONs(modFolder.child("jsons")))
@@ -316,7 +317,11 @@ object TranslationFileWriter {
 
     @VisibleForTesting
     fun getGeneratedStringsSize(): Int {
-        return GenerateStringsFromJSONs(Gdx.files.local("jsons/Civ V - Vanilla")).values.sumOf {
+        val vanillaFolder = if (PlatformCapabilities.current.backgroundThreadPools)
+            Gdx.files.local("jsons/Civ V - Vanilla")
+        else
+            Gdx.files.internal("jsons/Civ V - Vanilla")
+        return GenerateStringsFromJSONs(vanillaFolder).values.sumOf {
             // exclude empty lines
             it.count { line: String -> !line.startsWith(specialNewLineCode) }
         }
@@ -357,7 +362,7 @@ object TranslationFileWriter {
         /** Used only to call UniqueParameterType.guessTypeForTranslationWriter */
         private val ruleset: Ruleset,
         jsonsFolder: FileHandle,
-        fileFilter: (File) -> Boolean
+        fileFilter: (FileHandle) -> Boolean
     ): LinkedHashMap<String, MutableSet<String>>() {
         // Using LinkedHashMap (instead of HashMap) is important to maintain the order of sections in the translation file
 
@@ -366,7 +371,7 @@ object TranslationFileWriter {
             baseRuleset.jsonFolder(),
             ::defaultFileFilter
         )
-        constructor(jsonsFolder: FileHandle, fileFilter: (File) -> Boolean = ::defaultFileFilter) : this(
+        constructor(jsonsFolder: FileHandle, fileFilter: (FileHandle) -> Boolean = ::defaultFileFilter) : this(
             RulesetCache[jsonsFolder.parent().name()]?.takeIf { it.modOptions.isBaseRuleset } ?: RulesetCache[BaseRuleset.Civ_V_GnK.fullName]!!,
             jsonsFolder, fileFilter
         )
@@ -384,8 +389,10 @@ object TranslationFileWriter {
                 resultStrings.add("$specialNewLineCode ${uniqueIndexOfNewLine++}")
             }
 
-            val listOfJSONFiles = jsonsFolder
-                .list(fileFilter)
+            // TeaVM's web FileHandle deliberately does not implement the
+            // FileFilter overload. Listing first and filtering in Kotlin has
+            // the same semantics on JVM and works from packaged web assets.
+            val listOfJSONFiles = jsonsFolder.list().asSequence().filter(fileFilter)
                 .sortedBy { it.name() }       // generatedStrings maintains order, so let's feed it a predictable one
 
             for (jsonFile in listOfJSONFiles) {

@@ -6,6 +6,6 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextField
 object PlatformTextInput {
     @JvmStatic
     fun setKeyboardVisible(keyboard: TextField.OnscreenKeyboard, visible: Boolean) {
-        // Browser input is handled by the backend's DOM bridge.
+        // The web launcher handles keyboard visibility through browser input events.
     }
 }

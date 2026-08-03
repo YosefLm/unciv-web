@@ -201,7 +201,7 @@ class MultiplayerScreen : PickerScreen() {
 
         Concurrency.runOnNonDaemonThreadPool("Resign") {
             try {
-                val errorMessage = game.onlineMultiplayer.resignPlayer(multiplayerGamePreview, playerCiv)
+                val errorMessage = game.onlineMultiplayer.resignPlayer(multiplayerGamePreview, playerCiv, "")
 
                 launchOnGLThread {
                     if (errorMessage.isEmpty()) {
@@ -240,7 +240,7 @@ class MultiplayerScreen : PickerScreen() {
 
         Concurrency.runOnNonDaemonThreadPool("Skip turn") {
             try {
-                val skipTurnErrorMessage = game.onlineMultiplayer.skipCurrentPlayerTurn(multiplayerGamePreview, playerToSkip)
+                val skipTurnErrorMessage = game.onlineMultiplayer.skipCurrentPlayerTurn(multiplayerGamePreview, playerToSkip, "")
 
                 launchOnGLThread {
                     if (skipTurnErrorMessage == null) {

@@ -5,7 +5,7 @@ import path from "node:path";
 
 const root = process.cwd();
 
-test("phase-one web runtime disables unsupported platform capabilities", () => {
+test("web runtime preserves the phase-one capability baseline and profile selection", () => {
   const capabilities = fs.readFileSync(
     path.join(root, "core", "src", "com", "unciv", "platform", "PlatformCapabilities.kt"),
     "utf8",
@@ -18,5 +18,5 @@ test("phase-one web runtime disables unsupported platform capabilities", () => {
   assert.match(capabilities, /fun webPhase1\(\)/);
   assert.match(capabilities, /onlineMultiplayer = false/);
   assert.match(capabilities, /onlineModDownloads = false/);
-  assert.match(launcher, /setCurrent\(PlatformCapabilities\.webPhase1\(\)\)/);
+  assert.match(launcher, /setCurrent\((?:PlatformCapabilities\.webPhase1\(\)|features)/);
 });

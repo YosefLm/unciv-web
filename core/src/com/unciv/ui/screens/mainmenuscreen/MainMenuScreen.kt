@@ -144,7 +144,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         val baseRuleset = RulesetCache.getVanillaRuleset()
         ImageGetter.setNewRuleset(baseRuleset)
 
-        if (game.settings.enableEasterEggs) {
+        if (game.settings.enableEasterEggs && Gdx.app.type != Application.ApplicationType.WebGL) {
             val holiday = HolidayDates.getHolidayByDate()
             if (holiday != null)
                 EasterEggFloatingArt(stage, holiday.name)
@@ -178,7 +178,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
 
         val startNewGameBinding = if (enableKeyboardBindings) KeyboardBinding.StartNewGame else null
         val newGameButton = getMenuButton("Start new game", "OtherIcons/New", startNewGameBinding)
-            { game.pushScreen(NewGameScreen()) }
+            { game.pushScreen(NewGameScreen()) }.also { it.name = "main.start_new_game" }
         column1.add(newGameButton).row()
 
         val loadGameBinding = if (enableKeyboardBindings) KeyboardBinding.MainMenuLoad else null
@@ -189,7 +189,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         if (PlatformCapabilities.current.onlineMultiplayer) {
             val multiplayerBinding = if (enableKeyboardBindings) KeyboardBinding.Multiplayer else null
             val multiplayerTable = getMenuButton("Multiplayer", "OtherIcons/Multiplayer", multiplayerBinding)
-                { game.pushScreen(MultiplayerScreen()) }
+                { game.pushScreen(MultiplayerScreen()) }.also { it.name = "menu.multiplayer" }
             column2.add(multiplayerTable).row()
         }
 

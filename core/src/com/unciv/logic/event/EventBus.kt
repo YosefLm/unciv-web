@@ -50,8 +50,16 @@ object EventBus {
     }
 
     private fun getSuperClasses(kClass: KClass<*>): List<KClass<*>> {
-        if (kClass.supertypes.size == 1 && kClass.supertypes[0] == Any::class) return emptyList()
-        return kClass.supertypes
+        val supertypes = try {
+            kClass.supertypes
+        } catch (_: Throwable) {
+            // TeaVM does not provide the full Kotlin reflection implementation.
+            // A concrete event still has its direct listener below, so omitting
+            // inherited listeners is safer than crashing the web runtime.
+            return emptyList()
+        }
+        if (supertypes.size == 1 && supertypes[0] == Any::class) return emptyList()
+        return supertypes
             .map { it.classifier as KClass<*> }
             .flatMap { getSuperClasses(it) + it }
             .filter { it != Any::class }
