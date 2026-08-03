@@ -10,6 +10,10 @@ import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityConstructions
 import com.unciv.logic.city.CityStats
+import com.unciv.logic.city.managers.CityEspionageManager
+import com.unciv.logic.city.managers.CityExpansionManager
+import com.unciv.logic.city.managers.CityPopulationManager
+import com.unciv.logic.city.managers.CityReligionManager
 import com.unciv.logic.map.MapParameters
 import com.unciv.logic.map.TileMap
 import com.unciv.logic.map.mapunit.MapUnit
@@ -49,6 +53,8 @@ object WebJsonFallback {
         val graphTypes = listOf(
             GameInfo::class.java, BarbarianEncampment::class.java, BarbarianManager::class.java,
             City::class.java, CityConstructions::class.java, CityStats::class.java,
+            CityEspionageManager::class.java, CityExpansionManager::class.java,
+            CityPopulationManager::class.java, CityReligionManager::class.java,
             CivConstructions::class.java, Civilization::class.java, DiplomacyManager::class.java,
             ExploredRegion::class.java, EspionageManager::class.java, GoldenAgeManager::class.java,
             GreatPersonManager::class.java, PolicyManager::class.java, QuestManager::class.java,

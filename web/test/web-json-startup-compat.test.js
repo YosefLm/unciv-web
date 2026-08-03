@@ -12,4 +12,6 @@ test('web startup has the TeamVM ruleset hydration hook and transient-field fall
   assert.match(fallback, /JsonReader\(\)\.parse\(file\)/);
   assert.match(ruleset, /WebJsonFallback\.hydrateRulesetTechs\(this, techFile\)/);
   assert.match(fallback, /Modifier\.isTransient/);
+  assert.match(fallback, /CityPopulationManager::class\.java/);
+  assert.match(fallback, /CityReligionManager::class\.java/);
 });
