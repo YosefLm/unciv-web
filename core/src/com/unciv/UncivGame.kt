@@ -504,7 +504,6 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
             }
             Log.error("Uncaught throwable", ex)
             Log.error("Uncaught throwable stacktrace: %s", ex.stackTraceToString())
-            Log.error("Uncaught throwable diagnostic: %s", ex.buildDiagnostic())
             dumpLastError(ex)
             Gdx.app.postRunnable {
                 Gdx.input.inputProcessor =
