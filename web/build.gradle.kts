@@ -46,6 +46,22 @@ dependencies {
     implementation("com.github.xpenatan.gdx-teavm:gdx-freetype-web:$gdxTeaVMVersion")
 }
 
+// Keep the first independently built web branch on the API surface modeled by
+// the current TeamVM snapshot. This is web-only dependency resolution; the
+// upstream JVM/Android graphs continue to use their declared versions.
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlinx" && requested.name.startsWith("kotlinx-coroutines-")) {
+            useVersion("1.8.1")
+            because("TeamVM 0.15 does not model the newer coroutine scheduler JDK methods")
+        }
+        if (requested.group == "com.badlogicgames.gdx" && requested.name == "gdx") {
+            useVersion(gdxVersion)
+            because("The web graph must use the same GDX ABI as the upstream core")
+        }
+    }
+}
+
 tasks.register<JavaExec>("webBuildWasm") {
     dependsOn("classes")
     group = "web"
