@@ -17,7 +17,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  # Keep each pull request's validation independent so a stacked PR does not
+  # cancel the web run for its parent or sibling. Master/dispatch runs still
+  # share one Pages deployment lane through the ref-based fallback.
+  group: "pages-${{ github.event.pull_request.number || github.ref }}"
   cancel-in-progress: true
 
 jobs:
