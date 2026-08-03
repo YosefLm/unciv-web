@@ -240,6 +240,24 @@ private class UncivServerRunner : CliktCommand() {
         @OptIn(ExperimentalUuidApi::class) val password = authMap[authInfo.userId]
         return password == null || password == authInfo.password
     }
+
+    @OptIn(ExperimentalUuidApi::class)
+    private fun parseAuthFromQuery(raw: String?): BasicAuthInfo? {
+        if (raw.isNullOrBlank()) return null
+        val token = raw.trim()
+        val match = Regex("^Basic\\s+(.+)$", RegexOption.IGNORE_CASE).find(token) ?: return null
+        return try {
+            val decoded = String(java.util.Base64.getDecoder().decode(match.groupValues[1]))
+            val index = decoded.indexOf(':')
+            if (index <= 0) return null
+            val userId = decoded.substring(0, index)
+            val password = decoded.substring(index + 1)
+            BasicAuthInfo(userId = Uuid.parse(userId), password = password)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     // endregion Auth
 
     private fun serverRun(serverPort: Int, fileFolderName: String) {
@@ -375,6 +393,7 @@ private class UncivServerRunner : CliktCommand() {
 
                     if (chatV1Enabled) webSocket("/chat") {
                         val authInfo = call.principal<BasicAuthInfo>()
+                            ?: parseAuthFromQuery(call.request.queryParameters["auth"])
                         if (authInfo == null) {
                             sendSerialized(Response.Error("No authentication info found!"))
                             return@webSocket close()

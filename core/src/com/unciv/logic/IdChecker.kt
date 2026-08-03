@@ -1,12 +1,10 @@
 package com.unciv.logic
 
 import com.unciv.logic.multiplayer.FriendList.Friend
+import com.unciv.platform.parseUncivDeepLink
 import com.unciv.utils.Log
 import com.unciv.utils.isUUID
 import com.unciv.utils.softRequire
-import io.ktor.http.URLParserException
-import io.ktor.http.Url
-import yairm210.purity.annotations.LocalState
 import yairm210.purity.annotations.Pure
 import java.util.Locale
 import kotlin.math.abs
@@ -59,23 +57,13 @@ object IdChecker {
     // or "http://unciv.app/P-2ddb3a34-0699-4126-b7a5-38603e665928-2?name=%C4%90%E1%BA%B7ng"
     @Pure
     private fun checkAndReturnIdFromUrl(id: String, prefix: String): Friend? {
-        @LocalState
-        val url = try {
-            Url(id)
-        } catch (e: URLParserException) {
-            Log.error("invalid format for url $id", e)
-            return null
-        }
-        @LocalState
-        val segments = url.segments
-        @LocalState
-        val parameters = url.parameters
+        val parsed = parseUncivDeepLink(id) ?: return null
+        val segments = parsed.segments
         softRequire(segments.size==3, "url %s should be in \"Unciv\\G\" path", id) ?: return null
         softRequire(segments[0].equals("Unciv", ignoreCase=true), "%s url %s is not an \"Unciv\" link", id, segments[0]) ?: return null
         softRequire(segments[1].equals(prefix, ignoreCase=true), "%s url %s has incorrect prefix %s", prefix, id, segments[0]) ?: return null
         val gameId = checkAndReturnUuiId(segments[2], prefix, id) ?: return null
-        val name = parameters["name"] ?: ""
-        return Friend(name, gameId)
+        return Friend(parsed.name, gameId)
     }
 
     @Pure

@@ -1,5 +1,6 @@
 package com.unciv.utils
 
+import com.unciv.platform.PlatformUuid
 import yairm210.purity.annotations.Pure
 import java.security.SecureRandom
 import java.util.UUID
@@ -21,8 +22,7 @@ fun pseudoRandomUuid(rng: Random): UUID {
     val mostSigBits: Long = (rng.nextLong() and 0xf000L.inv()) or 0x4000L
     // and the 2 most-significant bits of the ninth byte to be the _variant_ 0x8 (aka OSF DCE).
     val leastSigBits: Long = (rng.nextLong() and 0x3fffffffffffffffL) or (1L shl 63)
-    return UUID(mostSigBits, leastSigBits)
+    return PlatformUuid.fromBits(mostSigBits, leastSigBits)
 }
 fun pseudoRandomUuid(rng: SecureRandom) = pseudoRandomUuid(rng.asKotlinRandom())
-
 

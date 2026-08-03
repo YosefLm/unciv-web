@@ -1,5 +1,6 @@
 package com.unciv.logic.files
 
+import com.badlogic.gdx.Application
 import com.badlogic.gdx.Files
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
@@ -45,6 +46,26 @@ class UncivFiles(
     /** If not null, this is the path to the directory in which to store the local files - mods, saves, maps, etc */
     val customDataDirectory: String? = null
 ) {
+    private fun externalFile(path: String): FileHandle? {
+        if (!supportsExternalStorage) return null
+        return runCatching { files.external(path) }.getOrNull()
+    }
+
+    private val supportsExternalStorage: Boolean by lazy {
+        // TeaVM currently reports external storage as available, but its Files
+        // implementation deliberately throws for FileType.External. Web saves
+        // use local storage instead; keep this boundary here so the JVM and
+        // Android storage policy remains unchanged.
+        if (Gdx.app.type == Application.ApplicationType.WebGL) return@lazy false
+        if (!files.isExternalStorageAvailable) return@lazy false
+        runCatching {
+            val probe = files.external("")
+            probe.path()
+            probe.exists()
+            true
+        }.getOrElse { false }
+    }
+
     init {
         debug("Creating UncivFiles, localStoragePath: %s, externalStoragePath: %s",
             files.localStoragePath, files.externalStoragePath)
@@ -77,9 +98,9 @@ class UncivFiles(
             gameName, saveFolder, preferExternalStorage, files.externalStoragePath)
         val location = "${saveFolder}/$gameName"
         val localFile = getLocalFile(location)
-        val externalFile = files.external(location)
+        val externalFile = externalFile(location)
 
-        val toReturn = if (files.isExternalStorageAvailable && (
+        val toReturn = if (externalFile != null && (
                 externalFile.exists() && !localFile.exists() || // external file is only valid choice
                 preferExternalStorage && (externalFile.exists() || !localFile.exists()) // unless local file is only valid choice, choose external
                 ) ) {
@@ -90,7 +111,7 @@ class UncivFiles(
         }
 
         toReturn.parent().mkdirs()
-        debug("Save found: %s", toReturn.file().absolutePath)
+        debug("Save found: %s", toReturn.path())
         return toReturn
     }
 
@@ -103,7 +124,7 @@ class UncivFiles(
     }
 
     fun pathToFileHandle(path: String): FileHandle {
-        return if (preferExternalStorage && files.isExternalStorageAvailable) files.external(path)
+        return if (preferExternalStorage) externalFile(path) ?: getLocalFile(path)
         else getLocalFile(path)
     }
 
@@ -120,15 +141,28 @@ class UncivFiles(
 
     private fun getSaves(saveFolder: String): Sequence<FileHandle> {
         debug("Getting saves from folder %s, externalStoragePath: %s", saveFolder, files.externalStoragePath)
+        if (Gdx.app.type == Application.ApplicationType.WebGL) {
+            // Web uses the Local backend for persistence. Do not construct or
+            // enumerate an External handle here: the current TeaVM backend
+            // intentionally rejects that FileType even when the rest of the
+            // Files API is available.
+            return runCatching {
+                getLocalFile(saveFolder).list().asSequence()
+            }.getOrDefault(emptySequence())
+        }
         // This construct instead of asSequence causes the actual list() to happen when the
         // first element is pulled, not right now before a Sequence is wrapped around the result.
         // Note that any performance gains are moot when logging is on: See the the `debug` below.
         val localFiles = Sequence { getLocalFile(saveFolder).list().iterator() }
 
+        val externalRoot = externalFile("")
         val externalFiles = when {
-            !files.isExternalStorageAvailable -> emptySequence()
-            getDataFolder().file().absolutePath == files.external("").file().absolutePath -> emptySequence()
-            else -> Sequence { files.external(saveFolder).list().iterator() }
+            externalRoot == null -> emptySequence()
+            getDataFolder().path() == externalRoot.path() -> emptySequence()
+            else -> Sequence {
+                externalFile(saveFolder)?.list()?.iterator()
+                    ?: emptyList<FileHandle>().iterator()
+            }
         }
 
         debug("Local files: %s, external files: %s",

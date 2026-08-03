@@ -9,6 +9,8 @@ import com.unciv.logic.Version
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.multiplayer.Multiplayer
+import com.unciv.platform.PlatformCapabilities
+import com.unciv.platform.PlatformRuntime
 import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.skins.SkinCache
@@ -37,7 +39,6 @@ import com.unciv.utils.*
 import kotlinx.coroutines.CancellationException
 import yairm210.purity.annotations.Readonly
 import java.io.PrintWriter
-import java.lang.management.ManagementFactory
 import java.util.*
 import kotlin.collections.ArrayDeque
 import kotlin.collections.asSequence
@@ -117,14 +118,17 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         musicController = MusicController()  // early, but at this point does only copy volume from settings
         installAudioHooks()
 
-        onlineMultiplayer = Multiplayer()
-
-        Concurrency.run {
-            // Check if the server is available in case the feature set has changed
-            try {
-                onlineMultiplayer.multiplayerServer.checkServerStatus()
-            } catch (ex: Exception) {
-                debug("Couldn't connect to server: " + ex.message)
+        if (PlatformCapabilities.current.onlineMultiplayer) {
+            onlineMultiplayer = Multiplayer()
+            if (Gdx.app.type != Application.ApplicationType.WebGL) {
+                Concurrency.run {
+                    // Check if the server is available in case the feature set has changed
+                    try {
+                        onlineMultiplayer.multiplayerServer.checkServerStatus()
+                    } catch (ex: Exception) {
+                        debug("Couldn't connect to server: " + ex.message)
+                    }
+                }
             }
         }
 
@@ -138,6 +142,9 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
             translations.tryReadTranslationForCurrentLanguage()
             translations.loadPercentageCompleteOfLanguages()
             TileSetCache.loadTileSetConfigs()
+            if (settings.tileSet !in TileSetCache) { // The configured tileset is no longer available, default back
+                settings.tileSet = Constants.defaultTileset
+            }
 
             SkinCache.loadSkinConfigs()
 
@@ -163,7 +170,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
 
                 when {
                     settings.isFreshlyCreated -> setAsRootScreen(LanguagePickerScreen())
-                    deepLinkedMultiplayerGame == null -> setAsRootScreen(MainMenuScreen())
+                    deepLinkedMultiplayerGame == null || !PlatformCapabilities.current.onlineMultiplayer -> setAsRootScreen(MainMenuScreen())
                     else -> tryLoadDeepLinkedGame()
                 }
 
@@ -422,20 +429,23 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         if (curGameInfo != null) {
             val autoSaveJob = files.autosaves.autoSaveJob
             if (autoSaveJob != null && autoSaveJob.isActive) {
-                // auto save is already in progress (e.g. started by onPause() event)
-                // let's allow it to finish and do not try to autosave second time
-                Concurrency.runBlocking {
-                    autoSaveJob.join()
+                if (PlatformCapabilities.current.backgroundThreadPools) {
+                    // auto save is already in progress (e.g. started by onPause() event)
+                    // let's allow it to finish and do not try to autosave second time
+                    Concurrency.runBlocking {
+                        autoSaveJob.join()
+                    }
                 }
             } else {
                 files.autosaves.autoSave(curGameInfo)      // NO new thread
             }
         }
         settings.save()
-        Concurrency.stopThreadPools()
-
-        // On desktop this should only be this one and "DestroyJavaVM"
-        logRunningThreads()
+        if (PlatformCapabilities.current.backgroundThreadPools) {
+            Concurrency.stopThreadPools()
+            // On desktop this should only be this one and "DestroyJavaVM"
+            logRunningThreads()
+        }
 
         // DO NOT `exitProcess(0)` - bypasses all Gdx and GLFW cleanup
     }
@@ -465,7 +475,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         return mainMenuScreen
     }
 
-    override fun getGcCount(): Int = ManagementFactory.getGarbageCollectorMXBeans().sumOf { it.collectionCount }.toInt()
+    override fun getGcCount(): Int = PlatformRuntime.gcCount()
 
     companion object {
         //region AUTOMATICALLY GENERATED VERSION DATA - DO NOT CHANGE THIS REGION, INCLUDING THIS COMMENT
@@ -493,6 +503,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
                 return // kotlin coroutines use this for control flow... so we can just ignore them.
             }
             Log.error("Uncaught throwable", ex)
+            Log.error("Uncaught throwable stacktrace: %s", ex.stackTraceToString())
             dumpLastError(ex)
             Gdx.app.postRunnable {
                 Gdx.input.inputProcessor =
