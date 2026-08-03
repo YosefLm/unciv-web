@@ -11,7 +11,6 @@ val coroutinesVersion = rootProject.libs.versions.coroutines.get()
 val ktorVersion = rootProject.libs.versions.ktor.get()
 val gdxTeaVMVersion = "-SNAPSHOT"
 val generatedWebJsTestsDir = layout.buildDirectory.dir("generated/web-jstests/kotlin")
-val generatedWebJsTestsDir = layout.buildDirectory.dir("generated/web-jstests/kotlin")
 
 sourceSets {
     main {
@@ -23,11 +22,6 @@ sourceSets {
         // This test imports desktop-only editor classes and is covered by the
         // JVM test source set, not by the browser-generated suite.
         java.exclude("com/unciv/ui/components/tilegroups/EditorMapHolderMemoryTest.kt")
-        java.exclude("com/unciv/testing/GdxTestRunner.kt")
-        java.exclude("com/unciv/testing/GdxTestRunnerFactory.kt")
-        java.srcDir("../tests/src")
-        java.srcDir(generatedWebJsTestsDir)
-        java.exclude("com/unciv/dev/**")
         java.exclude("com/unciv/testing/GdxTestRunner.kt")
         java.exclude("com/unciv/testing/GdxTestRunnerFactory.kt")
     }
