@@ -101,3 +101,23 @@ Only mark a segment mergeable after its own gate and every inherited gate pass. 
 - Final TeamVM build passes with 8,251 classes and verifies `war-from-start`, `war-preworld`, and `war-deep`. The web-only `ThreadLocalRandom` overlay, JSON hydration fallback, portable file diagnostics, EventBus reflection guard, and multiplayer persistence retry remain outside JVM behavior.
 - Final phase-4 desktop and mobile both report 12 pass, 0 fail, 0 blocked, 0 disabled, 0 page errors, and 0 console errors. The JS suite reports 240 executed, 18 explicit TeamVM-only exclusions, 0 failures, 0 page errors, and 0 console errors.
 - Dedicated file I/O, UI multiplayer, multi-instance turn/chat synchronization, strict clickops, WAR-from-start, WAR-preworld, WAR-deep, and a local Pages staging smoke all pass. Exact evidence paths and branch SHAs are in `tasks.csv`.
+
+## Final post-rebase audit (2026-08-03)
+
+- The final branch refs are rebuilt from `f2e3017b77ad9c7dda04549b1e8e7ddaddbdccf5`; `agent/web-stack-v3/rebase-work` now points to `agent/web-stack-v3/13-final-gates`.
+- The direct-parent audit passed for BASE and S00-S13: each child’s first unique commit has the immediately preceding branch as its parent. `git diff --check` and conflict-marker scans passed for every ref.
+- The counted-file maximum is 62 (S01); every branch is at or below the 100-file limit. `web/**`, `plans/**`, `docs/**`, and `*.md` were excluded exactly as specified. S00 has no web classes and therefore no web tests; web contracts begin when web classes are present.
+- The clean upstream baseline passed `.rebuild-backup/jvm-upstream-baseline.log`. Fresh branch logs `.rebuild-backup/jvm-final-01-*.log` through `.rebuild-backup/jvm-final-13-*.log` all pass the requested task list. On this Windows host the same task list was run with `--no-daemon --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process` to avoid the local Kotlin daemon/CreateProcess failure and parallel Metaspace exhaustion.
+- The final current tree passes `.rebuild-backup/web-final-gates-r3.log`: latest TeamVM `:web:webBuildJs`, 8,250 classes, WAR preload verification for all three WAR fixtures, and `BUILD SUCCESSFUL`.
+- The final Node contract run is 22/22. The browser JS suite is 240 executed, 0 failures, 18 explicit TeamVM-only exclusions, 0 page errors, and 0 console errors. Phase-4 desktop and mobile each report 12 pass, 0 fail, 0 blocked, 0 disabled, 0 page errors, and 0 console errors in `phase4-desktop-final-r5` and `phase4-mobile-final-r5`.
+- Final dedicated flows pass: file I/O, UI multiplayer, multi-instance turn/chat synchronization, strict clickops, WAR-from-start, WAR-preworld, and WAR-deep. The local Pages staging smoke remains recorded in `pages-smoke-site-r2` and the final WAR/browser outputs are recorded in `tasks.csv`.
+
+### Fixes found during the final audit
+
+- A cherry-pick had placed the server `parseAuthFromQuery` helper inside the WebSocket `when` block. Restoring the helper’s upstream structure fixed the branch-01 JVM gate without changing the web protocol.
+- Later upstream core methods regained Kotlin default arguments while the web multiplayer overlay did not. The overlay now supplies matching default parameters so TeaVM can resolve the generated `$default` ABI; JVM core behavior is unchanged.
+- Branch 11 had duplicate generated-browser-test source configuration after conflict resolution. It was deduplicated before the final JVM/web sweeps.
+- Branch 11’s phase-one Node contract was matching the pre-branch-11 spelling `fun webPhase1(): Features`; it now accepts both the explicit-return and inferred-return Kotlin forms. Branches 12 and 13 were rebased afterward and their inherited contract suite passes.
+- The original fresh-origin crash remains addressed by the web-only `ThreadLocalRandom` compatibility shim and the other web-only portability layers; no core/JVM fallback was changed.
+
+GitHub publication was not attempted: `gh repo view haimlm/unciv-web --json viewerPermission` reports `READ`, so this local stack is ready for review but cannot be pushed or opened as PRs from the current account.
