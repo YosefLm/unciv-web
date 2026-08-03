@@ -1,6 +1,5 @@
 package com.unciv.ui.screens.multiplayerscreens
 
-import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.unciv.Constants
@@ -24,6 +23,7 @@ import com.unciv.ui.popups.Popup
 import com.unciv.ui.popups.ToastPopup
 import com.unciv.ui.screens.pickerscreens.PickerScreen
 import com.unciv.ui.screens.savescreens.LoadGameScreen
+import com.unciv.utils.AppClipboard
 import com.unciv.utils.Concurrency
 import com.unciv.utils.Log
 import com.unciv.utils.launchOnGLThread
@@ -75,6 +75,7 @@ class MultiplayerScreen : PickerScreen() {
 
     private fun setupRightSideButton() {
         rightSideButton.setText("Join game".tr())
+        rightSideButton.name = "mp.join_game"
         rightSideButton.onClick {
             val missingMods = selectedGame!!.preview!!.gameParameters.getModsAndBaseRuleset()
                 .filter { !RulesetCache.containsKey(it) }
@@ -120,6 +121,7 @@ class MultiplayerScreen : PickerScreen() {
 
     private fun createRefreshButton(): TextButton {
         val btn = "Refresh list".toTextButton()
+        btn.name = "mp.refresh_list"
         btn.onClick {
             Concurrency.run("Update all multiplayer games") {
                 game.onlineMultiplayer.requestUpdate()
@@ -130,6 +132,7 @@ class MultiplayerScreen : PickerScreen() {
 
     private fun createAddGameButton(): TextButton {
         val btn = "Add multiplayer game".toTextButton()
+        btn.name = "mp.add_game"
         btn.onClick {
             game.pushScreen(AddMultiplayerGameScreen(this))
         }
@@ -146,18 +149,11 @@ class MultiplayerScreen : PickerScreen() {
                     "Are you sure you ([$civName]) want to resign?",
                     "Resign",
             ) {
-                resignPlayer(selectedGame!!, civName, civName)
+                resignPlayer(selectedGame!!, civName)
             }
             askPopup.open()
         }
         return resignButton
-    }
-    
-    private fun getOurCivNameOrPlayerId(): String {
-        val ourId = game.settings.multiplayer.getUserId()
-        val ourCiv = selectedGame!!.preview!!.getPlayerCiv(ourId)
-        // if we are a non-spectator player, use our civ name, otherwise use player id
-        return if (ourCiv != null && ourCiv.civName != Constants.spectator) ourCiv.civName else ourId
     }
 
     private fun createForceResignButton(): TextButton {
@@ -170,7 +166,7 @@ class MultiplayerScreen : PickerScreen() {
                 "Are you sure you want to force the current player ([$currentPlayer]) to resign?",
                 "Yes",
             ) {
-                resignPlayer(selectedGame!!, currentPlayer, getOurCivNameOrPlayerId())
+                resignPlayer(selectedGame!!, currentPlayer)
             }
             askPopup.open()
         }
@@ -187,7 +183,7 @@ class MultiplayerScreen : PickerScreen() {
                 "Are you sure you want to skip the turn of [$civName]?",
                 "Yes",
             ) {
-                skipCurrentPlayerTurn(selectedGame!!, civName, getOurCivNameOrPlayerId())
+                skipCurrentPlayerTurn(selectedGame!!, civName)
             }
             askPopup.open()
         }
@@ -195,11 +191,9 @@ class MultiplayerScreen : PickerScreen() {
     }
 
     /**
-     * Permanently turns the current playerCiv into an AI civ and uploads the game afterwards.
-     * 
-     * @param responsibleCivNameOrPlayerId Who caused the player to resign? Can be the name of a civ, or for example a player id
+     * Turns the current playerCiv into an AI civ and uploads the game afterwards.
      */
-    private fun resignPlayer(multiplayerGamePreview: MultiplayerGamePreview, playerCiv: String, responsibleCivNameOrPlayerId: String) {
+    private fun resignPlayer(multiplayerGamePreview: MultiplayerGamePreview, playerCiv: String) {
         //Create a popup
         val popup = Popup(this)
         popup.addGoodSizedLabel(Constants.working).row()
@@ -207,11 +201,7 @@ class MultiplayerScreen : PickerScreen() {
 
         Concurrency.runOnNonDaemonThreadPool("Resign") {
             try {
-                val errorMessage = game.onlineMultiplayer.resignPlayer(
-                    multiplayerGamePreview,
-                    playerCiv,
-                    responsibleCivNameOrPlayerId
-                )
+                val errorMessage = game.onlineMultiplayer.resignPlayer(multiplayerGamePreview, playerCiv)
 
                 launchOnGLThread {
                     if (errorMessage.isEmpty()) {
@@ -226,7 +216,7 @@ class MultiplayerScreen : PickerScreen() {
                 if (ex is MultiplayerAuthException) {
                     launchOnGLThread {
                         AuthPopup(this@MultiplayerScreen) { success ->
-                            if (success) resignPlayer(multiplayerGamePreview, playerCiv, responsibleCivNameOrPlayerId)
+                            if (success) resignPlayer(multiplayerGamePreview, playerCiv)
                         }.open(true)
                     }
                     return@runOnNonDaemonThreadPool
@@ -240,11 +230,9 @@ class MultiplayerScreen : PickerScreen() {
     }
 
     /**
-     * Temporarily turns the current playerCiv into an AI civ and uploads the game afterwards.
-     *
-     * @param responsibleCivNameOrPlayerId Who skipped the player's turn? Can be the name of a civ, or for example a player id
+     * Turns the current playerCiv into an AI civ and uploads the game afterwards.
      */
-    private fun skipCurrentPlayerTurn(multiplayerGamePreview: MultiplayerGamePreview, playerToSkip: String, responsibleCivNameOrPlayerId: String) {
+    private fun skipCurrentPlayerTurn(multiplayerGamePreview: MultiplayerGamePreview, playerToSkip: String) {
         //Create a popup
         val popup = Popup(this)
         popup.addGoodSizedLabel(Constants.working).row()
@@ -252,11 +240,7 @@ class MultiplayerScreen : PickerScreen() {
 
         Concurrency.runOnNonDaemonThreadPool("Skip turn") {
             try {
-                val skipTurnErrorMessage = game.onlineMultiplayer.skipCurrentPlayerTurn(
-                    multiplayerGamePreview,
-                    playerToSkip,
-                    responsibleCivNameOrPlayerId
-                )
+                val skipTurnErrorMessage = game.onlineMultiplayer.skipCurrentPlayerTurn(multiplayerGamePreview, playerToSkip)
 
                 launchOnGLThread {
                     if (skipTurnErrorMessage == null) {
@@ -272,7 +256,7 @@ class MultiplayerScreen : PickerScreen() {
                 if (ex is MultiplayerAuthException) {
                     launchOnGLThread {
                         AuthPopup(this@MultiplayerScreen) { success ->
-                            if (success) skipCurrentPlayerTurn(multiplayerGamePreview, playerToSkip, responsibleCivNameOrPlayerId)
+                            if (success) skipCurrentPlayerTurn(multiplayerGamePreview, playerToSkip)
                         }.open(true)
                     }
                     return@runOnNonDaemonThreadPool
@@ -343,7 +327,7 @@ class MultiplayerScreen : PickerScreen() {
         btn.onClick {
             val gameInfo = selectedGame?.preview
             if (gameInfo != null) {
-                Gdx.app.clipboard.contents = gameInfo.gameId
+                AppClipboard.writeText(gameInfo.gameId)
                 ToastPopup("Game ID copied to clipboard!", this)
             }
         }
@@ -361,7 +345,7 @@ class MultiplayerScreen : PickerScreen() {
     private fun createCopyUserIdButton(): TextButton {
         val btn = "Copy user ID".toTextButton()
         btn.onClick {
-            Gdx.app.clipboard.contents = game.settings.multiplayer.getUserId()
+            AppClipboard.writeText(game.settings.multiplayer.getUserId())
             ToastPopup("UserID copied to clipboard", this)
         }
         return btn

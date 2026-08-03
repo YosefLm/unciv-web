@@ -149,7 +149,7 @@ class Multiplayer {
      * @throws MultiplayerAuthException if the authentication failed
      * @return false if it's not the user's turn and thus resigning did not happen
      */
-    suspend fun resignPlayer(game: MultiplayerGamePreview, playerCivName: String, responsibleCivNameOrPlayerId: String): String {
+    suspend fun resignPlayer(game: MultiplayerGamePreview, playerCivName: String, responsibleCivNameOrPlayerId: String = ""): String {
         val preview = game.preview ?: throw game.error!!
         // download to work with the latest game state
         val gameInfo = multiplayerServer.tryDownloadGame(preview.gameId)
@@ -192,7 +192,7 @@ class Multiplayer {
      *
      * @param responsibleCivNameOrPlayerId Who skipped the player's turn? Can be the name of a civ, or for example a player id
      */
-    suspend fun skipCurrentPlayerTurn(game: MultiplayerGamePreview, playerCivName: String, responsibleCivNameOrPlayerId: String): String? {
+    suspend fun skipCurrentPlayerTurn(game: MultiplayerGamePreview, playerCivName: String, responsibleCivNameOrPlayerId: String = ""): String? {
         val preview = game.preview ?: return game.error!!.message
         // download to work with the latest game state
         val gameInfo: GameInfo

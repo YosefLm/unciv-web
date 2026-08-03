@@ -4,6 +4,12 @@ import com.badlogic.gdx.Gdx
 import com.unciv.UncivGame
 
 class WebGame : UncivGame() {
+    override fun create() {
+        super.create()
+        enforceWebInputDefaults()
+        WebValidationRunner.maybeStart(this)
+    }
+
     override fun installAudioHooks() {
         // Phase-1: no platform-specific audio hook wiring required.
     }
@@ -23,5 +29,14 @@ class WebGame : UncivGame() {
             settings.save()
         } catch (_: UninitializedPropertyAccessException) {
         }
+    }
+
+    private fun enforceWebInputDefaults() {
+        var changed = false
+        if (!settings.singleTapMove) {
+            settings.singleTapMove = true
+            changed = true
+        }
+        if (changed) settings.save()
     }
 }

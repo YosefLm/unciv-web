@@ -133,4 +133,87 @@ object WebJsonFallback {
             value = value.next
         }
     }
+
+    fun ensureBaseRulesetForCivilizations(gameInfo: GameInfo) {
+        if (PlatformCapabilities.current.backgroundThreadPools) return
+        val currentBase = gameInfo.gameParameters.baseRuleset
+        val currentRuleset = com.unciv.models.ruleset.RulesetCache[currentBase]
+        val civKeys = gameInfo.civilizations.asSequence()
+            .flatMap { sequenceOf(it.civName, it.civID) }
+            .filter { it.isNotBlank() && it != com.unciv.Constants.barbarians && it != com.unciv.Constants.spectator }
+            .toSet()
+        if (civKeys.isEmpty()) return
+        if (currentBase.isNotBlank() && currentRuleset != null && civKeys.all { it in currentRuleset.nations }) return
+        val baseRulesets = com.unciv.models.ruleset.RulesetCache.values.filter { it.modOptions.isBaseRuleset }
+        val candidates = if (baseRulesets.isNotEmpty()) baseRulesets else com.unciv.models.ruleset.RulesetCache.values
+        val fullMatch = candidates.firstOrNull { ruleset -> civKeys.all { it in ruleset.nations } }
+        gameInfo.gameParameters.baseRuleset = fullMatch?.name ?: currentBase
+    }
+
+    fun hydrateGameParameters(gameInfo: GameInfo, rawJson: String) {
+        if (PlatformCapabilities.current.backgroundThreadPools) return
+        val root = runCatching { JsonReader().parse(rawJson) }.getOrNull() ?: return
+        val rawParameters = root.get("gameParameters") ?: return
+        rawParameters.getString("baseRuleset", "").takeIf { it.isNotBlank() }?.let { gameInfo.gameParameters.baseRuleset = it }
+        val mods = linkedSetOf<String>()
+        var rawMod = rawParameters.get("mods")?.child
+        while (rawMod != null) {
+            rawMod.asString().takeIf { it.isNotBlank() }?.let { mods += it }
+            rawMod = rawMod.next
+        }
+        if (mods.isNotEmpty()) {
+            gameInfo.gameParameters.mods.clear()
+            gameInfo.gameParameters.mods.addAll(mods)
+        }
+        ensureBaseRulesetForCivilizations(gameInfo)
+    }
+
+    fun hydrateGameInfoIfMissingCivilizations(gameInfo: GameInfo, rawJson: String) {
+        if (PlatformCapabilities.current.backgroundThreadPools) return
+        if (gameInfo.civilizations.isNotEmpty()) {
+            ensureBaseRulesetForCivilizations(gameInfo)
+            return
+        }
+        val root = runCatching { JsonReader().parse(rawJson) }.getOrNull() ?: return
+        val civilizationsNode = root.get("civilizations") ?: return
+        val hydrated = ArrayList<Civilization>()
+        var civNode = civilizationsNode.child
+        while (civNode != null) {
+            val civName = civNode.getString("civName", "").ifBlank { civNode.getString("civID", "") }
+            if (civName.isNotBlank()) hydrated += Civilization(civName, civNode.getString("civID", civName))
+            civNode = civNode.next
+        }
+        if (hydrated.isNotEmpty()) gameInfo.civilizations.addAll(hydrated)
+        if (gameInfo.currentPlayer.isBlank()) gameInfo.currentPlayer = root.getString("currentPlayer", gameInfo.currentPlayer)
+        ensureBaseRulesetForCivilizations(gameInfo)
+    }
+
+    fun hydrateTileMapIfMissingTiles(tileMap: TileMap, rawJson: String) {
+        if (PlatformCapabilities.current.backgroundThreadPools || tileMap.tileList.isNotEmpty()) return
+        val root = runCatching { JsonReader().parse(rawJson) }.getOrNull() ?: return
+        val rawTileMap = root.get("tileMap") ?: root
+        val parser = json()
+        rawTileMap.get("mapParameters")?.let { node -> runCatching { tileMap.mapParameters = parser.readValue(MapParameters::class.java, node) } }
+        tileMap.description = rawTileMap.getString("description", tileMap.description)
+        val hydratedTiles = ArrayList<Tile>()
+        var rawTile = (rawTileMap.get("tileList") ?: rawTileMap.get("tiles"))?.child
+        while (rawTile != null) {
+            val tile = Tile()
+            runCatching { parser.readFields(tile, rawTile) }
+            val position = rawTile.get("position")
+            tile.position = com.unciv.logic.map.HexCoord(position?.getInt("x", 0) ?: 0, position?.getInt("y", 0) ?: 0)
+            tile.baseTerrain = rawTile.getString("baseTerrain", tile.baseTerrain.ifBlank { com.unciv.Constants.grassland })
+            tile.hasBottomRiver = rawTile.getBoolean("hasBottomRiver", tile.hasBottomRiver)
+            tile.hasBottomLeftRiver = rawTile.getBoolean("hasBottomLeftRiver", tile.hasBottomLeftRiver)
+            tile.hasBottomRightRiver = rawTile.getBoolean("hasBottomRightRiver", tile.hasBottomRightRiver)
+            tile.improvement = rawTile.getString("improvement", tile.improvement)
+            tile.improvementIsPillaged = rawTile.getBoolean("improvementIsPillaged", tile.improvementIsPillaged)
+            tile.setTileResource(rawTile.getString("resource", "").ifBlank { null }, updateCache = false)
+            tile.resourceAmount = rawTile.getInt("resourceAmount", tile.resourceAmount)
+            tile.naturalWonder = rawTile.getString("naturalWonder", tile.naturalWonder)
+            hydratedTiles += tile
+            rawTile = rawTile.next
+        }
+        if (hydratedTiles.isNotEmpty()) tileMap.tileList = hydratedTiles
+    }
 }
