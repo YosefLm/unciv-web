@@ -3,6 +3,7 @@ package com.unciv.models.ruleset
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
 import com.unciv.Constants
+import com.unciv.json.WebJsonFallback
 import com.unciv.json.fromJsonFile
 import com.unciv.json.json
 import com.unciv.logic.BackwardCompatibility.updateDeprecations
@@ -393,6 +394,7 @@ class Ruleset {
                     technologies[tech.name] = tech
                 }
             }
+            WebJsonFallback.hydrateRulesetTechs(this, techFile)
         }
 
         val buildingsFile = RulesetFile.Buildings.file()
