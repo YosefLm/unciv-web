@@ -68,7 +68,11 @@ class Multiplayer {
         multiplayerFiles.addGame(gamePreview, saveFileName)
     }
 
-    suspend fun resignPlayer(game: MultiplayerGamePreview, playerCivName: String): String {
+    suspend fun resignPlayer(
+        game: MultiplayerGamePreview,
+        playerCivName: String,
+        responsibleCivNameOrPlayerId: String
+    ): String {
         val preview = game.preview ?: throw game.error!!
         val gameInfo = multiplayerServer.tryDownloadGame(preview.gameId)
         if (gameInfo.currentPlayer != preview.currentPlayer) {
@@ -94,7 +98,11 @@ class Multiplayer {
         return ""
     }
 
-    suspend fun skipCurrentPlayerTurn(game: MultiplayerGamePreview, player: String): String? {
+    suspend fun skipCurrentPlayerTurn(
+        game: MultiplayerGamePreview,
+        player: String,
+        responsibleCivNameOrPlayerId: String
+    ): String? {
         val preview = game.preview ?: return game.error?.message
         val gameInfo = try {
             multiplayerServer.tryDownloadGame(preview.gameId)
