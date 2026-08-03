@@ -4,9 +4,9 @@ plugins {
     id("kotlin")
 }
 
-val gdxVersion: String by project
-val coroutinesVersion: String by project
-val ktorVersion: String by project
+val gdxVersion = rootProject.libs.versions.gdx.get()
+val coroutinesVersion = rootProject.libs.versions.coroutines.get()
+val ktorVersion = rootProject.libs.versions.ktor.get()
 val gdxTeaVMVersion = "-SNAPSHOT"
 
 sourceSets {
