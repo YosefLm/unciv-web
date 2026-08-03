@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
-ARG NODE_MAJOR=20
+ARG NODE_MAJOR=22
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
