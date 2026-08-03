@@ -121,4 +121,10 @@ Only mark a segment mergeable after its own gate and every inherited gate pass. 
 - Branch 11’s phase-one Node contract was matching the pre-branch-11 spelling `fun webPhase1(): Features`; it now accepts both the explicit-return and inferred-return Kotlin forms. Branches 12 and 13 were rebased afterward and their inherited contract suite passes.
 - The original fresh-origin crash remains addressed by the web-only `ThreadLocalRandom` compatibility shim and the other web-only portability layers; no core/JVM fallback was changed.
 
-GitHub publication was not attempted: `gh repo view haimlm/unciv-web --json viewerPermission` reports `READ`, so this local stack is ready for review but cannot be pushed or opened as PRs from the current account.
+### Post-rebuild publication and toolchain audit (2026-08-03)
+
+- The authorized publication target is `YosefLm/unciv-web`. The complete stack is published there as PRs 1-14; each PR targets the immediately preceding stack branch, with `agent/web-stack-v3/base-upstream-master` rooted at the pinned upstream SHA.
+- The final rebase retained the startup compatibility asset in the first web module: the build derives web-only `assets/startup-logo.png` from the checked-in Unciv icon. This fixes the current TeamVM preload request without changing JVM/core behavior.
+- Browser CI uses Node 26, `playwright@latest`, and `ws@latest`. The standalone phase-1 web build uses Java 22, the newest Java proven locally with this Gradle 8.11.1 project; the Docker builder keeps Java 21 because that is the reliable Ubuntu 24.04 package and the upstream workflow baseline.
+- A fresh Windows exact-gate retry was blocked by the host’s JDK 22 Kotlin worker `CreateProcess error=1920`; prior exact branch logs and the clean upstream baseline pass, and the authoritative post-rebase check is the fresh GitHub Actions run. This host-environment failure is not recorded as a source pass.
+- The previous web CI failure was diagnosed and fixed: the global `pages` concurrency group canceled sibling stacked PR runs, and the Node 20 Docker image could not install current npm. S11 now uses a per-PR concurrency key and Node 26.
