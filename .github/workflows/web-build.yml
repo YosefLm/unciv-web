@@ -30,6 +30,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Enforce stacked PR file limit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+          else
+            base="$PUSH_BASE_SHA"
+            head="$PUSH_HEAD_SHA"
+            if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+              base="$(git rev-list --max-parents=0 HEAD)"
+            fi
+          fi
+          node scripts/stack/check-stack-size.js --base-ref "$base" --head-ref "$head"
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -146,7 +168,6 @@ jobs:
   web-browser-compat:
     name: Browser Matrix (${{ matrix.browser }}-${{ matrix.mode }})
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: web-build
     strategy:
       fail-fast: false
@@ -174,7 +195,7 @@ jobs:
         if: matrix.mode == 'smoke'
         run: |
           env HEADLESS=true WEB_BROWSER=${{ matrix.browser }} WEB_BASE_URL=http://127.0.0.1:18080 WEB_VALIDATION_STARTUP_TIMEOUT_MS=45000 WEB_VALIDATION_STARTUP_ATTEMPTS=2 \
-          node scripts/web/run-web-validation.js || true
+          node scripts/web/run-web-validation.js
 
       - name: Publish browser suite summary
         if: always()
@@ -195,10 +216,9 @@ jobs:
             tmp/web-validation-latest.png
 
   web-phase4-alpha:
-    name: Web Phase4 Alpha (informational)
+    name: Web Phase4 Alpha (required)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     needs: web-build
     steps:
       - name: Checkout
@@ -304,9 +324,8 @@ jobs:
             tmp/web-validation-latest.png
 
   web-multiplayer-multi-instance:
-    name: Web Multiplayer Multi-Instance (informational probe)
+    name: Web Multiplayer Multi-Instance (required)
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: web-build
     steps:
       - name: Checkout
@@ -379,9 +398,8 @@ jobs:
             tmp/web-ui-core-loop-latest.png
 
   web-ui-multiplayer:
-    name: Web UI Multiplayer (informational probe, 30s)
+    name: Web UI Multiplayer (required, 30s)
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: web-build
     steps:
       - name: Checkout
@@ -454,9 +472,8 @@ jobs:
             tmp/web-clickops-multiplayer-guest-latest.png
 
   web-browser-file-io:
-    name: Browser File I/O Smoke (informational)
+    name: Browser File I/O Smoke (required)
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: web-build
     steps:
       - name: Checkout
