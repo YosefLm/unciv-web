@@ -31,6 +31,7 @@ import com.unciv.utils.toGdxArray
 import com.unciv.utils.withGLContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlin.reflect.KMutableProperty0
 import kotlin.time.Duration.Companion.milliseconds

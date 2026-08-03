@@ -51,6 +51,7 @@ import com.unciv.utils.launchOnGLThread
 import com.unciv.utils.withThreadPoolContext
 import com.unciv.utils.withoutItem
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import java.util.zip.Deflater
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
