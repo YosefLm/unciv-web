@@ -19,6 +19,5 @@ fun String.toUUIDOrNull(): UUID? = try {
  */
 @Pure
 fun String.isUUID(): Boolean = toUUIDOrNull() != null
-
 /** Determines if we're running from a jar, given an instance of any Unciv-specific class.
  *  (Not a String extension, but as long as we don't have a 'generic' extension file...) */

@@ -337,10 +337,9 @@ async function dismissPopups(page, options) {
     if (!snapshot.state || snapshot.state.hasPopup !== true) return;
     const dismiss = snapshot.targets.find((item) => item && item.id === 'popup.dismiss' && item.visible === true && item.enabled === true);
     if (!dismiss) {
-      if (snapshot.state && snapshot.state.screen === 'WorldScreen') {
-        await page.waitForTimeout(150);
-        continue;
-      }
+      // A popup can be present before its Scene2D button has a measurable
+      // target (notably the initial world intro under TeaVM). Escape is the
+      // same user-visible close action and prevents the probe from stalling.
       await page.keyboard.press('Escape').catch(() => {});
       await page.keyboard.press('Enter').catch(() => {});
       await page.waitForTimeout(150);

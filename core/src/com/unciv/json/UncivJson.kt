@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.SerializationException
 import com.unciv.logic.map.HexCoord
 import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.components.input.KeyCharAndCode
+import com.unciv.platform.PlatformCapabilities
 import java.time.Duration
 
 

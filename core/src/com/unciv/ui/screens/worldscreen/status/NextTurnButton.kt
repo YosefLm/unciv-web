@@ -29,6 +29,7 @@ class NextTurnButton(
     private val unitsDueCell: Cell<Label>
 
     init {
+        name = "world.next_turn"
         pad(15f)
         onActivation { nextTurnAction.action(worldScreen) }
         addContextMenu { NextTurnMenu(stage, this, worldScreen) }

@@ -236,7 +236,7 @@ class GameOptionsTable(
                     MultiplayerHelpers.showDropboxWarning(previousScreen as BaseScreen)
                 }
                 update()
-            }
+            }.also { it.name = "newgame.online_multiplayer" }
 
     private fun Table.addAnyoneCanSpectateCheckbox() =
             addCheckbox("Allow anyone to spectate", gameParameters.anyoneCanSpectate)

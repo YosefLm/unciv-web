@@ -21,7 +21,6 @@ const { resolveChromiumArgs } = require('./lib/chromium-args');
   const consoleErrors = [];
   const consoleWarnings = [];
   const pageErrors = [];
-  const ignoredPageErrors = [];
   const ignoredConsoleErrors = [];
 
   const browserTypes = { chromium, firefox, webkit };
@@ -69,21 +68,6 @@ const { resolveChromiumArgs } = require('./lib/chromium-args');
   });
   page.on('pageerror', err => {
     const text = String(err && err.stack ? err.stack : err);
-    if (/Cannot read properties of null \(reading '\$dispose'\)/.test(text)) {
-      ignoredPageErrors.push(text);
-      process.stdout.write(`[pageerror:ignored] ${text}\n`);
-      return;
-    }
-    if (/Cannot read properties of null \(reading '\$pause'\)/.test(text)) {
-      ignoredPageErrors.push(text);
-      process.stdout.write(`[pageerror:ignored] ${text}\n`);
-      return;
-    }
-    if (/Cannot read properties of null \(reading 'pixelStorei'\)/.test(text)) {
-      ignoredPageErrors.push(text);
-      process.stdout.write(`[pageerror:ignored] ${text}\n`);
-      return;
-    }
     pageErrors.push(text);
     process.stdout.write(`[pageerror] ${text}\n`);
   });
@@ -189,12 +173,10 @@ const { resolveChromiumArgs } = require('./lib/chromium-args');
     ignoredConsoleErrorCount: ignoredConsoleErrors.length,
     consoleWarningCount: consoleWarnings.length,
     pageErrorCount: pageErrors.length,
-    ignoredPageErrorCount: ignoredPageErrors.length,
     consoleErrors,
     ignoredConsoleErrors,
     consoleWarnings,
     pageErrors,
-    ignoredPageErrors,
     jsResult,
   };
 

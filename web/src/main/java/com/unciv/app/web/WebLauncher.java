@@ -59,6 +59,11 @@ public class WebLauncher {
         config.useGL30 = true;
         config.showDownloadLogs = true;
 
+        // The latest TeamVM snapshot can deliver a visibilitychange event
+        // between preload-listener replacement and the first app frame. Keep
+        // that backend-only lifecycle race from becoming a browser crash.
+        WebVisibilityCompat.install();
+
         if(jsTestsMode) {
             new WebApplication(new WebJsTestsGame(), new WebAssetPreloadApplicationListener(), config);
             return;

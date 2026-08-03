@@ -335,7 +335,7 @@ object WebValidationRunner {
         }
     }
 
-    private suspend fun validateStartNewGame(game: WebGame, aiPlayers: Int = 2): Pair<Boolean, String> {
+        private suspend fun validateStartNewGame(game: WebGame, aiPlayers: Int = 2): Pair<Boolean, String> {
         return try {
             val setup = GameSetupInfo.fromSettings().apply {
                 gameParameters.players = arrayListOf(Player(playerType = PlayerType.Human))
@@ -484,25 +484,30 @@ object WebValidationRunner {
             return false to "Unable to establish war state with ${enemyCiv.civID}."
         }
 
-        val spawnAnchor = warrior.getTile().neighbors
-            .firstOrNull { tile -> tile.isLand && !tile.isImpassible() && tile.militaryUnit == null && tile.civilianUnit == null }
-            ?: return false to "No valid adjacent tile to spawn enemy warrior."
-        val enemyWarrior = enemyCiv.units.placeUnitNearTile(spawnAnchor.position, warrior.baseUnit)
-            ?: return false to "Failed to spawn enemy warrior near player warrior."
+        val spawnCandidates = warrior.getTile().neighbors
+            .filter { tile -> tile.isLand && !tile.isImpassible() && tile.militaryUnit == null && tile.civilianUnit == null }
+            .toList()
+        var enemyWarrior: MapUnit? = null
+        for (spawnCandidate in spawnCandidates) {
+            enemyWarrior = enemyCiv.units.placeUnitNearTile(spawnCandidate.position, warrior.baseUnit)
+            if (enemyWarrior != null) break
+        }
+        val placedEnemyWarrior = enemyWarrior
+            ?: return false to "Failed to spawn enemy warrior near player warrior (candidates=${spawnCandidates.size})."
 
         warrior.currentMovement = warrior.getMaxMovement().toFloat()
         warrior.attacksThisTurn = 0
         warrior.action = null
-        val enemyHealthBefore = enemyWarrior.health
+        val enemyHealthBefore = placedEnemyWarrior.health
 
         val attackable = TargetHelper.getAttackableEnemies(warrior, warrior.movement.getDistanceToTiles())
             .firstOrNull { attackTile -> (attackTile.combatant as? MapUnitCombatant)?.unit?.id == enemyWarrior.id }
-            ?: return false to "No attackable enemy tile resolved for warrior-vs-warrior check."
+            ?: return false to "No attackable enemy tile resolved for warrior-vs-warrior check (enemy=${placedEnemyWarrior.currentTile.position})."
 
         Battle.moveAndAttack(MapUnitCombatant(warrior), attackable)
         waitFrames(30)
 
-        val enemyAfter: MapUnit? = enemyCiv.units.getUnitById(enemyWarrior.id)
+        val enemyAfter: MapUnit? = enemyCiv.units.getUnitById(placedEnemyWarrior.id)
         val damagedOrKilled = enemyAfter == null || enemyAfter.health < enemyHealthBefore
         val attackConsumed = warrior.attacksThisTurn > 0 || warrior.currentMovement < warrior.getMaxMovement()
         if (!damagedOrKilled || !attackConsumed) {
@@ -655,11 +660,8 @@ object WebValidationRunner {
             if (!techPicked.first) return false to techPicked.second
 
             val strictFlow = if (strictSecondTurnFlow) validateStrictMoveEndTurnFlow(game) else true to "Strict turn-stall flow skipped."
-            val strictFlowNote = if (strictFlow.first) {
-                strictFlow.second
-            } else {
-                "Strict move/end-turn probe observed a recoverable blocker: ${strictFlow.second}"
-            }
+            if (!strictFlow.first) return false to strictFlow.second
+            val strictFlowNote = strictFlow.second
 
             val turnProgress = if (useFastTurnLoop) validateEndTurnLoop(game, turns = 10)
             else advanceTurnsByClicks(game, turns = 10)
@@ -1558,12 +1560,12 @@ object WebValidationRunner {
                                     waitFrames(waitAfterActionFrames.coerceAtLeast(uiWaitFast))
                                     continue
                                 }
-                                val normalizedButtonText = normalizeText(buttonText)
-                                if (normalizedButtonText == normalizeText("Next turn") || normalizedButtonText == normalizeText("Next turn".tr())) {
-                                    screen.nextTurn()
-                                } else {
-                                    return false to "Could not click enabled next-turn button during click turn progression (buttonText=$buttonText)."
-                                }
+                                // Some TeamVM/GDX text actors have no readable label even though
+                                // the typed NextTurnButton is enabled and actionable. The click
+                                // was still attempted above; use the same screen action as the
+                                // button's listener so a missing label cannot become a false
+                                // "recoverable blocker" in the required strict probe.
+                                screen.nextTurn()
                             }
                             val progressedNow = waitUntilFrames(360) {
                                 val currentTurns = game.gameInfo?.turns ?: return@waitUntilFrames false

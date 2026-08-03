@@ -96,7 +96,10 @@ object IdChecker {
             }
             return trimmedPlayerId
         }
-        Log.error("$prefix uuid $url has incorrect length")
+        // This function is also called from text-field change listeners. Do
+        // not turn every intermediate keystroke into a browser console error;
+        // the caller still receives the same null validation result and the
+        // complete-format checks below retain their diagnostics.
         return null
     }
 

@@ -219,9 +219,11 @@ async function commitGuestTurn(page, report, beforeState, timeoutMs) {
   const startedAt = Date.now();
   const actionTimeoutMs = scaleTimeout(timeoutMs, 15000, 0.2, 45000);
   const techSelectionTimeoutMs = scaleTimeout(timeoutMs, 30000, 0.3, 90000);
+  let lastSnapshot = null;
   while (Date.now() - startedAt <= timeoutMs) {
     await dismissPopups(page, { label: 'guest', timeoutMs: 8000 }).catch(() => {});
     const snapshot = await getSnapshot(page, 'guest');
+    lastSnapshot = snapshot;
     const state = snapshot.state || null;
     if (state && state.hasPopup === true) {
       await page.waitForTimeout(250);
@@ -233,6 +235,15 @@ async function commitGuestTurn(page, report, beforeState, timeoutMs) {
     }
     if (state && state.screen === 'WorldScreen') {
       if (hasTurnCommitted(beforeState, state)) return state;
+      const fortify = snapshot.targets.find((item) => item
+        && item.id === 'world.unit_action.Fortify'
+        && item.visible === true
+        && item.enabled === true);
+      if (fortify) {
+        await clickTarget(page, { label: 'guest', targetId: 'world.unit_action.Fortify', timeoutMs: actionTimeoutMs, allowScroll: true });
+        await page.waitForTimeout(300);
+        continue;
+      }
       const nextTurn = snapshot.targets.find((item) => item && item.id === 'world.next_turn' && item.visible === true && item.enabled === true);
       if (nextTurn) {
         const x = Math.floor(Number(nextTurn.x || 0) + Number(nextTurn.width || 0) / 2);
@@ -250,7 +261,10 @@ async function commitGuestTurn(page, report, beforeState, timeoutMs) {
     }
     await page.waitForTimeout(250);
   }
-  throw new Error('Guest could not commit end-turn action from world state.');
+  const targetIds = lastSnapshot && Array.isArray(lastSnapshot.targets)
+    ? lastSnapshot.targets.map((item) => item && item.id).filter(Boolean).slice(0, 80).join(', ')
+    : 'none';
+  throw new Error(`Guest could not commit end-turn action from world state (screen=${lastSnapshot && lastSnapshot.state ? lastSnapshot.state.screen : 'unknown'}, hasPopup=${lastSnapshot && lastSnapshot.state ? lastSnapshot.state.hasPopup : 'unknown'}, targets=${targetIds}).`);
 }
 
 async function maybePassHostTurn(hostPage, report, timeoutMs) {

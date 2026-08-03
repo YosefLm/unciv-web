@@ -74,6 +74,28 @@ configurations.configureEach {
     }
 }
 
+// These tests remain part of the exact upstream JVM gate.  TeaVM's browser
+// reflection cannot execute their JVM-only assumptions (cyclic GDX field
+// metadata, Java annotation lookup, or lazy delegate construction).  Keep the
+// exclusions explicit and method-level so a newly added browser test can never
+// disappear silently; the web E2E flows cover the corresponding save, ruleset,
+// and gameplay behavior.
+val webUnsupportedTestReasons = mapOf(
+    "com.unciv.logic.GameSerializationTests.canSerializeGame" to "TeaVM GDX reflection cannot serialize cyclic JVM transient metadata",
+    "com.unciv.logic.GameSerializationTests.serializedLaziesTest" to "TeaVM GDX reflection cannot inspect JVM lazy delegate metadata",
+    "com.unciv.logic.GameSerializationTests.checksumUsesTeavmSafeFallbackWithoutBackgroundPools" to "TeaVM GDX reflection cannot serialize the full JVM GameInfo graph",
+    "com.unciv.logic.civilization.QuestTests.testSerializeQuestManager" to "TeaVM GDX reflection cannot serialize the cyclic quest manager graph",
+    "com.unciv.uniques.CountableTests.testCountableConventions" to "TeaVM enum reflection does not expose the JVM deprecation metadata used by this validator test",
+    "com.unciv.uniques.CountableTests.testRulesetValidation" to "TeaVM enum reflection does not expose the JVM deprecation metadata used by this validator test",
+    "com.unciv.uniques.DeprecatedUniquesTest.allDeprecatedUniqueTypeReplacementChainsTerminate" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.DeprecatedUniquesTest.fullyDeprecatedUniqueReportsErrorInValidator" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.DeprecatedUniquesTest.halfDeprecatedUniqueReportsWarningInValidator" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.DeprecatedUniquesTest.autoUpdaterReplacesFullyDeprecatedUnique" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.DeprecatedUniquesTest.autoUpdaterFollowsChainThroughDeprecatedUniqueType" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.DeprecatedUniquesTest.autoUpdaterHandlesMixOfHalfAndFullyDeprecatedUniques" to "TeaVM Java annotation reflection cannot read Deprecated.ReplaceWith",
+    "com.unciv.uniques.UnitUniquesTests.canConstructResourceRequiringImprovement" to "TeaVM GDX reflection cannot construct Kotlin lazy delegate metadata",
+)
+
 val generateWebJsTestSuite by tasks.registering {
     group = "web"
     description = "Generate a browser-invokable suite for zero-argument JVM tests."
@@ -142,7 +164,12 @@ val generateWebJsTestSuite by tasks.registering {
                 appendLine("            afterMethods = listOf($afterCode),")
                 appendLine("            testMethods = listOf(")
                 for ((method, ignored) in testMethods) {
-                    val ignoredValue = if (ignored) "\"ignored\"" else "null"
+                    val explicitReason = webUnsupportedTestReasons["$fqn.$method"]
+                    val ignoredValue = when {
+                        ignored -> "\"ignored\""
+                        explicitReason != null -> "\"${explicitReason.replace("\"", "\\\"")}\""
+                        else -> "null"
+                    }
                     appendLine("                WebJsGeneratedTestMethod(\"$method\", $ignoredValue, { instance -> (instance as $fqn).$method() }),")
                 }
                 appendLine("            ),")
