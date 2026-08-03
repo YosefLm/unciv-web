@@ -53,7 +53,9 @@ tasks.register<JavaExec>("webBuildWasm") {
     mainClass.set("com.unciv.app.web.BuildWebWasm")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = rootProject.projectDir
-    maxHeapSize = "4g"
+    // The latest TeamVM snapshot performs a large first-time dependency
+    // analysis even on the minimal bootstrap branch.
+    maxHeapSize = "8g"
     jvmArgs("-Xms1g", "-XX:+UseG1GC")
 }
 
@@ -64,7 +66,9 @@ tasks.register<JavaExec>("webBuildJs") {
     mainClass.set("com.unciv.app.web.BuildWebJs")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = rootProject.projectDir
-    maxHeapSize = "4g"
+    // Keep every independently built stack branch within the same generous
+    // TeaVM analysis budget; later branches may reuse the analysis cache.
+    maxHeapSize = "8g"
     jvmArgs("-Xms1g", "-XX:+UseG1GC")
 }
 
