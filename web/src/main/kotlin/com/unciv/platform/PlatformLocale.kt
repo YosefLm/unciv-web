@@ -1,10 +1,12 @@
 package com.unciv.platform
 
 import java.util.Locale
+import yairm210.purity.annotations.Readonly
 
 /** TeaVM-compatible locale subset used by Unciv. */
 object PlatformLocale {
     @JvmStatic
+    @Readonly
     fun fromLanguageTag(languageTag: String): Locale {
         val parts = languageTag.split('-')
         val language = parts.firstOrNull()?.takeIf { it.isNotEmpty() } ?: return Locale.getDefault()
