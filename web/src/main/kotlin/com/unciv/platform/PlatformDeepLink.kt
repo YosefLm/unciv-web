@@ -1,9 +1,7 @@
 package com.unciv.platform
 
-import yairm210.purity.annotations.Pure
 
 /** Small browser URL parser for the deep-link shape consumed by IdChecker. */
-@Pure
 fun parseUncivDeepLink(url: String): DeepLinkParts? {
     val rawPath = url.substringBefore('?').substringBefore('#')
     val uncivPathStart = rawPath.indexOf("/Unciv/", ignoreCase = true)
