@@ -52,6 +52,7 @@ final class BuildWebCommon {
 
         builder.build(outputPath.toFile());
         flattenWebapp(webappPath, outputPath);
+        ensureStartupLogo(assetsPath, outputPath);
     }
 
     private static void ensureDirectory(Path path) {
@@ -83,6 +84,23 @@ final class BuildWebCommon {
             throw new RuntimeException("Failed to flatten TeaVM webapp directory", e);
         }
         deleteRecursively(webappPath);
+    }
+
+    /**
+     * The current TeamVM web backend requests this conventional preload image before
+     * the application starts. Keep the compatibility asset web-only and derive it
+     * from the checked-in Unciv icon so JVM/desktop resource behavior is unchanged.
+     */
+    private static void ensureStartupLogo(Path assetsPath, Path outputPath) {
+        Path source = assetsPath.resolve("ExtraImages/Icons/Unciv32.png");
+        Path target = outputPath.resolve("assets/startup-logo.png");
+        if (Files.isRegularFile(target) || !Files.isRegularFile(source)) return;
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed creating web startup logo", e);
+        }
     }
 
     private static void deleteRecursively(Path path) {
