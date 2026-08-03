@@ -13,7 +13,7 @@ inputs:
   node-version:
     description: Node.js version for Playwright scripts.
     required: false
-    default: "20"
+    default: "22"
   browsers:
     description: Playwright browsers to install.
     required: false
