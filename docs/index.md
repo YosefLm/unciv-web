@@ -10,6 +10,8 @@ Unmodded gameplay is equal to Civ V, so any Civ V guide will suffice
 
 The game contains a tutorial to get you started
 
+<a href="game/index.html">Play Unciv in your browser</a>
+
 ## How can I contribute?
 
 The most valuable first step to getting involved is engaging with our community: join the [Discord!](https://discord.gg/bjrB4Xw) It's a great place to meet your fellow contributors.

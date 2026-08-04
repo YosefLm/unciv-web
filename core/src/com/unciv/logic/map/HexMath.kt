@@ -426,9 +426,9 @@ data class HexCoord(val x: Int = 0, val y: Int = 0) {
         override fun write(json: Json, coord: HexCoord, knownType: Class<*>?) {
             json.writeObjectStart()
             if (coord.x != 0)
-                json.writeValue("x", coord.x)
+                json.writeValue("x", coord.x, Int::class.javaPrimitiveType)
             if (coord.y != 0)
-                json.writeValue("y", coord.y)
+                json.writeValue("y", coord.y, Int::class.javaPrimitiveType)
             json.writeObjectEnd()
         }
 
@@ -436,8 +436,13 @@ data class HexCoord(val x: Int = 0, val y: Int = 0) {
             //TODO once we can assume there are no more games out there serialized in the verbose
             //     {"class": "java.lang.Float", "value": 23} format, replace with Int::class.java
             //     and remove `testCanDeserializeVerboseVector2Format`
-            val x = json.readValue("x", Float::class.java, 0f, jsonData)
-            val y = json.readValue("y", Float::class.java, 0f, jsonData)
+            fun JsonValue.readCoordinate(name: String): Float {
+                val value = get(name) ?: return 0f
+                val scalar = value.get("value") ?: value
+                return runCatching { scalar.asFloat() }.getOrDefault(0f)
+            }
+            val x = jsonData.readCoordinate("x")
+            val y = jsonData.readCoordinate("y")
             return HexCoord(x.toInt(), y.toInt())
         }
     }

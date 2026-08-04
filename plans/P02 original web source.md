@@ -30,3 +30,12 @@ because their filenames match.
 - Independent JVM suite passes.
 - `:web:webBuildJs` passes with the latest TeamVM snapshot.
 - Bootstrap, startup, and start-new-game focused contracts pass.
+## Completed E2E evidence (2026-08-04)
+
+`agent/web-stack-min/01-original-web` is a direct descendant of the pinned
+baseline and passes the exact suite, `:web:webBuildJs`, its focused web
+contract, and fresh-origin startup through world entry. The final branch tip
+has 108 total changed files and 71 counted files. Evidence is in
+`tmp/p01-final-exact-suite-rerun.log`, `tmp/p01-clean-diagnostics-webbuild2.log`,
+`tmp/p01-browser-flow.mjs` plus the generated screenshots, and
+`web/test/web-pr1-regressions.test.js`.

@@ -22,6 +22,6 @@ test("web bootstrap uses the latest TeaVM web snapshot API", () => {
   assert.match(gradle, /JVM_17/);
   assert.match(builder, /com\.github\.xpenatan\.gdx\.teavm\.backends\.web/);
   assert.match(builder, /new WebBackend\(\)/);
-  assert.match(launcher, /new WebApplication\(new WebGame\(\), config\)/);
+  assert.match(launcher, /new WebApplication\(new WebGame\(\), new WebAssetPreloadApplicationListener\(\), config\)/);
   assert.doesNotMatch(launcher, /TeaApplication/);
 });

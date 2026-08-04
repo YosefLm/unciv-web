@@ -107,9 +107,6 @@ async function main() {
 
   page.on('pageerror', (err) => {
     const text = err && err.stack ? err.stack : String(err);
-    if (/Cannot read properties of null \(reading '\$dispose'\)/.test(text)) return;
-    if (/Cannot read properties of null \(reading '\$pause'\)/.test(text)) return;
-    if (/Cannot read properties of null \(reading 'pixelStorei'\)/.test(text)) return;
     pageErrors.push(text);
   });
   page.on('crash', () => {

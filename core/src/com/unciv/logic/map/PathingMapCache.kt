@@ -13,6 +13,7 @@ import yairm210.purity.annotations.Readonly
 import java.util.BitSet
 import java.util.Formatter
 import java.util.Locale
+import kotlin.math.abs
 
 
 /**
@@ -458,7 +459,13 @@ internal class PathingMapCache private constructor(
             if (node.turns == Int.MAX_VALUE) // cannot move to this tile
                 format(" -/---%s", tag)
             else // we've found a minimum path to this tile
-                format("%2d/%1.1f%s", node.turns, node.moveUsedThisTurn.toFloat(), tag)
+                format(
+                    "%2d/%d.%d%s",
+                    node.turns,
+                    node.moveUsedThisTurn.bits / FixedPointMovement.MOVE_SPEED_BASE,
+                    abs(node.moveUsedThisTurn.bits % FixedPointMovement.MOVE_SPEED_BASE) * 10 / FixedPointMovement.MOVE_SPEED_BASE,
+                    tag,
+                )
         }
     }
 

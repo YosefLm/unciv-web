@@ -8,6 +8,7 @@ import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.components.fonts.DiacriticSupport
 import com.unciv.ui.components.fonts.FontRulesetIcons
 import com.unciv.utils.Log
@@ -557,7 +558,8 @@ fun String.removeConditionals(): String {
  */
 @Readonly
 fun Number.tr(): String {
-    return UncivGame.Current.settings.getCurrentNumberFormat().format(this)
+    val language = UncivGame.Current.settings.language
+    return formatNumberForLanguage(language)
 }
 
 /** Formats number according to a specific [language]
@@ -568,5 +570,14 @@ fun Number.tr(): String {
  */
 @Readonly
 fun Number.tr(language: String): String {
-    return LocaleCode.getNumberFormatFromLanguage(language).format(this)
+    return formatNumberForLanguage(language)
+}
+
+private fun Number.formatNumberForLanguage(language: String): String {
+    val formatted = LocaleCode.getNumberFormatFromLanguage(language).format(this)
+    if (PlatformCapabilities.current.backgroundThreadPools || language != LocaleCode.Bangla.name) return formatted
+    val bengaliDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+    return formatted.map { character ->
+        if (character in '0'..'9') bengaliDigits[character - '0'] else character
+    }.joinToString("")
 }

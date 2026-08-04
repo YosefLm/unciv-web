@@ -29,3 +29,14 @@ Review every changed file and hunk against clean upstream. For each change ask:
 Record each decision in `tasks.csv` with the affected files, failure, ownership,
 test, and final action (`KEEP`, `CONSOLIDATE`, `MOVE_TO_RUNTIME_FORK`, `DELETE`,
 or `REPLACE`).
+
+## Completed audit (2026-08-04)
+
+The final audit is recorded by change ID in `tasks.csv`. It keeps the narrow
+web-only `Log`, filesystem, keyboard, map-resource, JSON/reflection, and
+ThreadLocalRandom boundaries; consolidates exact duplicate registration and
+runner logic; and records no runtime fork because the latest snapshots pass
+without a proven fork A/B benefit. The duplicate `PromotionScreenColors`
+registration was removed. The provider descriptor was restored because the
+existing CI guard and the provider class require it. Negative evidence is in
+`tmp/p03-negative-random-browser.log` and `tmp/p03-negative-json-browser.log`.

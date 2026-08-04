@@ -25,4 +25,3 @@ fun pseudoRandomUuid(rng: Random): UUID {
     return PlatformUuid.fromBits(mostSigBits, leastSigBits)
 }
 fun pseudoRandomUuid(rng: SecureRandom) = pseudoRandomUuid(rng.asKotlinRandom())
-
