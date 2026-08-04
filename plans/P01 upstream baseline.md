@@ -18,4 +18,3 @@ Create the only regression baseline from `yairm210/Unciv` master at
 
 The pinned upstream checkout is required because the previous stack base was
 obsolete. No application change belongs in this step.
-

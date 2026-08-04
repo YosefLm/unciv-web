@@ -30,4 +30,3 @@ because their filenames match.
 - Independent JVM suite passes.
 - `:web:webBuildJs` passes with the latest TeamVM snapshot.
 - Bootstrap, startup, and start-new-game focused contracts pass.
-
