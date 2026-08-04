@@ -1,6 +1,7 @@
 ﻿package com.unciv.ui.screens.mainmenuscreen
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Application
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.actions.Actions
@@ -21,6 +22,7 @@ import com.unciv.logic.map.MapType
 import com.unciv.logic.map.mapgenerator.MapGenerator
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameSetupInfo
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.tilesets.TileSetCache
@@ -96,7 +98,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
     private fun getMenuButton(
         text: String,
         icon: String,
-        binding: KeyboardBinding,
+        binding: KeyboardBinding?,
         function: () -> Unit
     ): Table {
         val table = Table().pad(15f, 30f, 15f, 30f)
@@ -110,9 +112,16 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
             .padTopDescent()
 
         table.touchable = Touchable.enabled
-        table.onActivation(binding = binding) {
-            stopBackgroundMapGeneration()
-            function()
+        if (binding != null) {
+            table.onActivation(binding = binding) {
+                stopBackgroundMapGeneration()
+                function()
+            }
+        } else {
+            table.onClick {
+                stopBackgroundMapGeneration()
+                function()
+            }
         }
 
         table.pack()
@@ -150,38 +159,49 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
 
         val column1 = Table().apply { defaults().pad(10f).fillX() }
         val column2 = if (singleColumn) column1 else Table().apply { defaults().pad(10f).fillX() }
+        val enableKeyboardBindings = Gdx.app.type != Application.ApplicationType.WebGL
 
         if (game.files.autosaves.autosaveExists()) {
-            val resumeTable = getMenuButton("Resume","OtherIcons/Resume", KeyboardBinding.Resume)
+            val resumeBinding = if (enableKeyboardBindings) KeyboardBinding.Resume else null
+            val resumeTable = getMenuButton("Resume","OtherIcons/Resume", resumeBinding)
                 { resumeGame() }
             column1.add(resumeTable).row()
         }
 
-        val quickstartTable = getMenuButton("Quickstart", "OtherIcons/Quickstart", KeyboardBinding.Quickstart)
+        val quickstartBinding = if (enableKeyboardBindings) KeyboardBinding.Quickstart else null
+        val quickstartTable = getMenuButton("Quickstart", "OtherIcons/Quickstart", quickstartBinding)
             { quickstartNewGame() }
         column1.add(quickstartTable).row()
 
-        val newGameButton = getMenuButton("Start new game", "OtherIcons/New", KeyboardBinding.StartNewGame)
+        val startNewGameBinding = if (enableKeyboardBindings) KeyboardBinding.StartNewGame else null
+        val newGameButton = getMenuButton("Start new game", "OtherIcons/New", startNewGameBinding)
             { game.pushScreen(NewGameScreen()) }
         column1.add(newGameButton).row()
 
-        val loadGameTable = getMenuButton("Load game", "OtherIcons/Load", KeyboardBinding.MainMenuLoad)
+        val loadGameBinding = if (enableKeyboardBindings) KeyboardBinding.MainMenuLoad else null
+        val loadGameTable = getMenuButton("Load game", "OtherIcons/Load", loadGameBinding)
             { game.pushScreen(LoadGameScreen()) }
         column1.add(loadGameTable).row()
 
-        val multiplayerTable = getMenuButton("Multiplayer", "OtherIcons/Multiplayer", KeyboardBinding.Multiplayer)
-            { game.pushScreen(MultiplayerScreen()) }
-        column2.add(multiplayerTable).row()
+        if (PlatformCapabilities.current.onlineMultiplayer) {
+            val multiplayerBinding = if (enableKeyboardBindings) KeyboardBinding.Multiplayer else null
+            val multiplayerTable = getMenuButton("Multiplayer", "OtherIcons/Multiplayer", multiplayerBinding)
+                { game.pushScreen(MultiplayerScreen()) }
+            column2.add(multiplayerTable).row()
+        }
 
-        val mapEditorScreenTable = getMenuButton("Map editor", "OtherIcons/MapEditor", KeyboardBinding.MapEditor)
+        val mapEditorBinding = if (enableKeyboardBindings) KeyboardBinding.MapEditor else null
+        val mapEditorScreenTable = getMenuButton("Map editor", "OtherIcons/MapEditor", mapEditorBinding)
             { game.pushScreen(MapEditorScreen()) }
         column2.add(mapEditorScreenTable).row()
 
-        val modsTable = getMenuButton("Mods", "OtherIcons/Mods", KeyboardBinding.ModManager)
+        val modsBinding = if (enableKeyboardBindings) KeyboardBinding.ModManager else null
+        val modsTable = getMenuButton("Mods", "OtherIcons/Mods", modsBinding)
             { game.pushScreen(ModManagementScreen()) }
         column2.add(modsTable).row()
 
-        val optionsTable = getMenuButton("Options", "OtherIcons/Options", KeyboardBinding.MainMenuOptions)
+        val optionsBinding = if (enableKeyboardBindings) KeyboardBinding.MainMenuOptions else null
+        val optionsTable = getMenuButton("Options", "OtherIcons/Options", optionsBinding)
             { openOptionsPopup() }
         optionsTable.onLongPress { openOptionsPopup(withDebug = true) }
         column2.add(optionsTable).row()
@@ -197,12 +217,14 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         stage.addActor(scrollPane)
         table.center(scrollPane)
 
-        globalShortcuts.add(KeyboardBinding.QuitMainMenu) {
-            if (hasOpenPopups()) {
-                closeAllPopups()
-                return@add
+        if (enableKeyboardBindings) {
+            globalShortcuts.add(KeyboardBinding.QuitMainMenu) {
+                if (hasOpenPopups()) {
+                    closeAllPopups()
+                    return@add
+                }
+                game.popScreen()
             }
-            game.popScreen()
         }
 
         val civilopediaButton = "?".toLabel(fontSize = 48)
@@ -213,8 +235,10 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         civilopediaButton.touchable = Touchable.enabled
         // Passing the binding directly to onActivation gives you a size 26 tooltip...
         civilopediaButton.onActivation { openCivilopedia() }
-        civilopediaButton.keyShortcuts.add(KeyboardBinding.Civilopedia)
-        civilopediaButton.addTooltip(KeyboardBinding.Civilopedia, 30f)
+        if (enableKeyboardBindings) {
+            civilopediaButton.keyShortcuts.add(KeyboardBinding.Civilopedia)
+            civilopediaButton.addTooltip(KeyboardBinding.Civilopedia, 30f)
+        }
         civilopediaButton.setPosition(buttonsPosFromEdge, buttonsPosFromEdge)
         stage.addActor(civilopediaButton)
 

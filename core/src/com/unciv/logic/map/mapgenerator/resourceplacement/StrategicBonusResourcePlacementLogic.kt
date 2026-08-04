@@ -265,8 +265,10 @@ object StrategicBonusResourcePlacementLogic {
         val rng = GameContext(gameInfo = tileMap.gameInfo).stateBasedRandom("StrategicBonusResourcePlacementLogic.placeSmallDepositsOfModernStrategicResourcesOnCityStates")
         val lastEra = ruleset.eras.values.maxOf { it.eraNumber }
         val modernOptions = strategicResources.filter {
-            it.revealedBy != null &&
-                    ruleset.eras[ruleset.technologies[it.revealedBy]!!.era()]!!.eraNumber >= lastEra / 2
+            val revealedBy = it.revealedBy ?: return@filter false
+            val technology = ruleset.technologies[revealedBy] ?: return@filter false
+            val era = ruleset.eras[technology.era()] ?: return@filter false
+            era.eraNumber >= lastEra / 2
         }
 
         if (modernOptions.any())

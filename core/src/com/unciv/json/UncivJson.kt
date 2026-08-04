@@ -2,11 +2,13 @@ package com.unciv.json
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
+import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.Json
 import com.badlogic.gdx.utils.JsonValue
 import com.badlogic.gdx.utils.JsonWriter
 import com.badlogic.gdx.utils.SerializationException
 import com.unciv.logic.map.HexCoord
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.components.input.KeyCharAndCode
 import java.time.Duration
 
@@ -25,6 +27,10 @@ fun json() = Json(JsonWriter.OutputType.json).apply {
     setSerializer(Duration::class.java, DurationSerializer())
     setSerializer(KeyCharAndCode::class.java, KeyCharAndCode.Serializer())
     setSerializer(HexCoord::class.java, HexCoord.Serializer())
+    if (!PlatformCapabilities.current.backgroundThreadPools) {
+        WebJsonFallback.markTransientFields(this)
+        setSerializer(Vector2::class.java, WebJsonFallback.Vector2Serializer())
+    }
     //setSerializer(String::class.java, StringInterningSerializer())
 }
 
