@@ -13,3 +13,11 @@ Required regression cases:
 
 Run a negative test with each repair removed, then rerun the full inherited JVM
 and browser gates before deciding whether a runtime-fork change can replace it.
+
+## Completed E2E evidence (2026-08-04)
+
+Ruleset hydration, transient fallback, and reflection contracts pass in the
+final 17/17 Node suite and phase-4 browser validation. Removing the shared
+reflection-registration call from a temporary negative worktree still builds
+but fails the browser UI flow while founding a city, proving the boundary is
+needed. JVM serialization and save/load remain covered by the exact suite.

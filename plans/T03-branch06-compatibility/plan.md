@@ -9,7 +9,7 @@ Keep `agent/web-stack-v2/06-core-followup-appclipboard` independently compilable
 - Parent: `agent/web-stack-v2/05-core-followup-concurrency`
 - Source feature branch: `origin/web/stack/06-core-followup-appclipboard`
 - Source lineage base: `51c07b743`
-- Publication scope: `haimlm/*` only
+- Publication scope: `YosefLm/*` only
 
 ## Compatibility changes
 
@@ -29,3 +29,12 @@ Keep `agent/web-stack-v2/06-core-followup-appclipboard` independently compilable
 ## Completion evidence
 
 Record the compile command, test result, commit, and any remaining blocker in `tasks.csv`.
+
+## Superseding completion (2026-08-04)
+
+This historical branch-06 compatibility plan is satisfied by the rebuilt
+three-PR chain from the pinned upstream baseline. Its API/default-argument and
+clipboard requirements are covered by the P1/P2 exact suites and inherited web
+contracts. The old `haimlm/*` publication wording is superseded: all current
+branch and PR work is restricted to `YosefLm/unciv-web`, and no external fork
+was required.

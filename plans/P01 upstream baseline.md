@@ -18,3 +18,10 @@ Create the only regression baseline from `yairm210/Unciv` master at
 
 The pinned upstream checkout is required because the previous stack base was
 obsolete. No application change belongs in this step.
+## Completed E2E evidence (2026-08-04)
+
+The pinned clean checkout passed the exact suite in
+`tmp/upstream-baseline-exact.log` with 69 actionable tasks. The recorded
+toolchain is Java 22.0.2, Gradle 8.11.1, Kotlin 2.3.0, Node 26.4.0, npm
+11.17.0, Playwright 1.62.1, and the latest recorded TeamVM snapshots. This
+baseline remains the only upstream-regression comparison for every descendant.

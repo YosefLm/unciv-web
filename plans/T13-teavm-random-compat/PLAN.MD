@@ -128,3 +128,18 @@ Only mark a segment mergeable after its own gate and every inherited gate pass. 
 - Browser CI uses Node 26, `playwright@latest`, and `ws@latest`. The standalone phase-1 web build uses Java 22, the newest Java proven locally with this Gradle 8.11.1 project; the Docker builder keeps Java 21 because that is the reliable Ubuntu 24.04 package and the upstream workflow baseline.
 - A fresh Windows exact-gate retry was blocked by the host’s JDK 22 Kotlin worker `CreateProcess error=1920`; prior exact branch logs and the clean upstream baseline pass, and the authoritative post-rebase check is the fresh GitHub Actions run. This host-environment failure is not recorded as a source pass.
 - The previous web CI failure was diagnosed and fixed: the global `pages` concurrency group canceled sibling stacked PR runs, and the Node 20 Docker image could not install current npm. S11 now uses a per-PR concurrency key and Node 26.
+
+## Current three-PR closure (2026-08-04)
+
+The older fourteen-segment history above is superseded by the minimum practical
+stack `01-original-web` → `02-features` → `03-teavm-final`, all rooted at the
+pinned upstream master commit. The final source was rebuilt with the latest
+available TeamVM snapshots, Java 22.0.2, Node 26.4.0, npm 11.17.0, Playwright
+1.62.1, and MkDocs 1.6.1. The exact final evidence is recorded in `tasks.csv`.
+
+The web-only random overlay and shared JSON/reflection boundary are retained
+because their negative worktrees fail browser startup/gameplay when removed.
+The latest runtime snapshots otherwise pass, so no `YosefLm` TeaVM fork was
+created. Final JVM, Node, browser, multiplayer, file/mod/audio, WAR, preload,
+SLF4J-provider, and local Pages gates all pass with no missing or informational
+gate. No branch or push outside `YosefLm/unciv-web` is part of this completion.
