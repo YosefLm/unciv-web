@@ -8,4 +8,3 @@ built and consumed reproducibly.
 The `ThreadLocalRandom` repair must remain web-only. It must not alter upstream
 JVM, Desktop, or Android classes. Verify this with a clean JVM diff and a fresh
 browser startup from a new origin.
-

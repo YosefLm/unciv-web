@@ -29,4 +29,3 @@ Review every changed file and hunk against clean upstream. For each change ask:
 Record each decision in `tasks.csv` with the affected files, failure, ownership,
 test, and final action (`KEEP`, `CONSOLIDATE`, `MOVE_TO_RUNTIME_FORK`, `DELETE`,
 or `REPLACE`).
-

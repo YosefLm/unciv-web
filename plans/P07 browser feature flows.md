@@ -9,4 +9,3 @@ gameplay turns, file chooser/save-load, mod download, audio, multiplayer
 transport and chat, WAR preload, and deep validation. A flow passes only with
 zero crash screens, unsupported-operation failures, page errors, console
 errors, and JavaScript test failures.
-
