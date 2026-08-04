@@ -112,7 +112,6 @@ final class BuildWebCommon {
             "com.unciv.models.ruleset.unique.TemporaryUnique",
             "com.unciv.models.metadata.GameParameters",
             "com.unciv.logic.map.MapParameters",
-            "com.unciv.ui.screens.pickerscreens.PromotionScreenColors",
             "com.unciv.logic.GameInfoPreview",
             "com.unciv.logic.civilization.CivilizationInfoPreview",
             "com.unciv.logic.map.TileMap$Preview");
