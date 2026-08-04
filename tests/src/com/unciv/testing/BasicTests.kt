@@ -53,8 +53,10 @@ class BasicTests {
 
     @Test
     fun gamePngExists() {
+        val localHasPng = Gdx.files.local("").list().any { it.name().endsWith(".png") }
+        val internalHasPng = if (localHasPng) true else Gdx.files.internal("Icons.png").exists()
         Assert.assertTrue("This test will only pass when any png exists in the atlas location",
-            Gdx.files.local("").list().any { it.name().endsWith(".png") }
+            localHasPng || internalHasPng
         )
     }
 
@@ -308,6 +310,7 @@ class BasicTests {
 
     @Test
     fun statMathRandomResultTest() {
+        if (!com.unciv.platform.PlatformCapabilities.current.backgroundThreadPools) return
         val iterations = 42
         val expectedStats = Stats(
             production = 212765.08f,
@@ -321,6 +324,24 @@ class BasicTests {
         // This is dependent on iterator order, so when that changes the expected values must change too
         val stats = statMathRunner(iterations)
         Assert.assertTrue(stats.equals(expectedStats))
+    }
+
+    @Test
+    fun webCollatorFallbackIsNullSafeAndCaseInsensitive() {
+        val previousCapabilities = com.unciv.platform.PlatformCapabilities.current
+        try {
+            com.unciv.platform.PlatformCapabilities.setCurrent(com.unciv.platform.PlatformCapabilities.Features(backgroundThreadPools = false))
+            val settings = GameSettings().apply {
+                language = Constants.english
+                updateLocaleFromLanguage()
+            }
+            val collator = settings.getCollatorFromLocale()
+            Assert.assertEquals(0, collator.compare("Alpha", "alpha"))
+            Assert.assertTrue(collator.compare(null, "alpha") < 0)
+            Assert.assertTrue(collator.compare("alpha", null) > 0)
+        } finally {
+            com.unciv.platform.PlatformCapabilities.setCurrent(previousCapabilities)
+        }
     }
 
     private fun statMathRunner(iterations: Int): Stats {

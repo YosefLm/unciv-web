@@ -1,0 +1,68 @@
+name: Web Phase1 Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  web-build:
+    name: Build Web JS Artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "22"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build JS bundle
+        run: ./gradlew :web:webBuildJs
+
+      - name: Upload web dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unciv-web-dist
+          path: web/build/dist
+          if-no-files-found: error
+
+  web-phase1-smoke:
+    name: Browser Smoke (phase1)
+    runs-on: ubuntu-latest
+    needs: web-build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare web test environment
+        uses: ./.github/actions/web-test-env
+        with:
+          browsers: chromium
+
+      - name: Run phase1 gameplay smoke
+        run: |
+          xvfb-run -a env HEADLESS=false WEB_BROWSER=chromium WEB_PROFILE=phase1 WEB_BASE_URL=http://127.0.0.1:18080 WEB_VALIDATION_STARTUP_TIMEOUT_MS=45000 WEB_VALIDATION_STARTUP_ATTEMPTS=2 \
+          node scripts/web/run-web-validation.js
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-phase1-smoke
+          path: |
+            /tmp/web-server.log
+            tmp/web-validation-result.json
+            tmp/web-validation-summary.json
+            tmp/web-validation-latest.png

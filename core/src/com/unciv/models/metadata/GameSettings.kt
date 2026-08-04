@@ -11,6 +11,7 @@ import com.unciv.models.UncivSound
 import com.unciv.models.metadata.GameSettings.WindowState.Companion.minimumHeight
 import com.unciv.models.metadata.GameSettings.WindowState.Companion.minimumWidth
 import com.unciv.models.translations.tr
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.components.fonts.FontFamilyData
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.KeyboardBindings
@@ -174,6 +175,11 @@ class GameSettings {
 
     // Used by launcher to recognize a first-run
     var isFreshlyCreated = false
+    /** One-time migration marker for web UX defaults by detected form factor */
+    var webUxProfileVersion = 0
+    /** Runtime-only web form-factor marker. Updated at startup, never persisted. */
+    @Transient
+    var webRuntimeMobile: Boolean = false
 
     // Controlled from ModManagementScreen
     var visualMods = HashSet<String>()
@@ -245,6 +251,9 @@ class GameSettings {
 
     fun getCollatorFromLocale(): Comparator<String?> {
         val locale = getCurrentLocale()
+        if (PlatformCapabilities.current.backgroundThreadPools) {
+            createJvmCollatorComparator(locale)?.let { return it }
+        }
         return Comparator { first, second ->
             when {
                 first == null && second == null -> 0
@@ -254,6 +263,21 @@ class GameSettings {
             }
         }
     }
+
+    private fun createJvmCollatorComparator(locale: Locale): Comparator<String?>? = runCatching {
+        val collatorClass = Class.forName("java.text.Collator")
+        val getInstance = collatorClass.getMethod("getInstance", Locale::class.java)
+        val collator = getInstance.invoke(null, locale)
+        val compare = collatorClass.getMethod("compare", Any::class.java, Any::class.java)
+        Comparator<String?> { first, second ->
+            when {
+                first == null && second == null -> 0
+                first == null -> -1
+                second == null -> 1
+                else -> compare.invoke(collator, first, second) as Int
+            }
+        }
+    }.getOrNull()
 
     @Readonly
     fun getCurrentNumberFormat(): NumberFormat {

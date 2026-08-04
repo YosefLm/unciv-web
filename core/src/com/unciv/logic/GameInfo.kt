@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.unciv.Constants
 import com.unciv.GUI
 import com.unciv.UncivGame
+import com.unciv.json.WebJsonFallback
 import com.unciv.json.json
 import com.unciv.logic.BackwardCompatibility.convertFortify
 import com.unciv.logic.BackwardCompatibility.ensureUnitIds
@@ -34,6 +35,7 @@ import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.IHasUniques
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
+import com.unciv.platform.PlatformCapabilities
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
 import com.unciv.ui.screens.savescreens.Gzip
@@ -350,14 +352,25 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         val oldChecksum = checksum
         checksum = "" // Checksum calculation cannot include old checksum, obvs
         val bytes = json().toJson(this).toByteArray(Charsets.UTF_8)
+        checksum = oldChecksum
+        if (PlatformCapabilities.current.backgroundThreadPools)
+            calculateJvmSha1Checksum(bytes)?.let { return it }
         var hash = 0xcbf29ce484222325uL
         for (byte in bytes) {
             hash = hash xor (byte.toInt() and 0xff).toULong()
             hash *= 0x100000001b3uL
         }
-        checksum = oldChecksum
         return hash.toString(16).padStart(16, '0')
     }
+
+    private fun calculateJvmSha1Checksum(bytes: ByteArray): String? = runCatching {
+        val digestClass = Class.forName("java.security.MessageDigest")
+        val getInstance = digestClass.getMethod("getInstance", String::class.java)
+        val messageDigest = getInstance.invoke(null, "SHA-1")
+        val digest = digestClass.getMethod("digest", ByteArray::class.java)
+            .invoke(messageDigest, bytes) as ByteArray
+        Gzip.encode(digest)
+    }.getOrNull()
 
     //endregion
     //region State changing functions
@@ -717,8 +730,22 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
                 gameParameters.mods.add(mod.replace("-", " "))
             }
         }
-        
+
         ruleset = RulesetCache.getComplexRuleset(gameParameters)
+
+        if (!PlatformCapabilities.current.backgroundThreadPools) {
+            val civKeys = civilizations.asSequence()
+                .flatMap { sequenceOf(it.civName, it.civID) }
+                .filter { it.isNotBlank() && it != Constants.barbarians && it != Constants.spectator }
+                .toSet()
+            if (civKeys.isNotEmpty() && civKeys.any { it !in ruleset.nations }) {
+                val beforeBase = gameParameters.baseRuleset
+                WebJsonFallback.ensureBaseRulesetForCivilizations(this)
+                if (gameParameters.baseRuleset != beforeBase) {
+                    ruleset = RulesetCache.getComplexRuleset(gameParameters)
+                }
+            }
+        }
         
         // any mod the saved game lists that is currently not installed causes null pointer
         // exceptions in this routine unless it contained no new objects or was very simple.
@@ -765,9 +792,20 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         if (tilesWithLowestRow.size > 2) tileMap.mapParameters.shape = MapShape.rectangular
 
         if (currentPlayer == "") {
-            currentPlayerCiv =
+            currentPlayerCiv = if (!PlatformCapabilities.current.backgroundThreadPools) {
+                if (gameParameters.isOnlineMultiplayer) {
+                    civilizations.firstOrNull { it.isHuman() && !it.isSpectator() }
+                        ?: civilizations.firstOrNull { !it.isSpectator() }
+                        ?: civilizations.first()
+                } else {
+                    civilizations.firstOrNull { it.isHuman() }
+                        ?: civilizations.firstOrNull { it.isSpectator() }
+                        ?: civilizations.first()
+                }
+            } else {
                 if (gameParameters.isOnlineMultiplayer) civilizations.first { it.isHuman() && !it.isSpectator() } // For MP, spectator doesn't get a 'turn'
                 else civilizations.first { it.isHuman() } // for non-MP games, you can be a spectator of an AI-only match, and you *do* get a turn, sort of
+            }
             currentPlayer = currentPlayerCiv.civID
         } else currentPlayerCiv = getCivilization(currentPlayer)
 
