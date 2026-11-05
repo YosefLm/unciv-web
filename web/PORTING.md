@@ -40,39 +40,51 @@ mods, file pickers, sound, and WebAssembly are separate follow-up stages.
 
 ## Validation status
 
-The initial opt-in module used gdx-teavm 1.6.2 (TeaVM 0.15.0), libGDX 1.14.2,
-Kotlin 2.4.20 and Java 17 bytecode. Development validation uses JDK 21.
-The backend's published Gradle plugin owns JavaScript compilation, assets and
-the generated HTML; there is no custom bundle postprocessor.
+The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and Java 17 bytecode.
+gdx-teavm 1.6.2 is the latest tagged release and pins TeaVM 0.15.0, so web
+builds require a gdx-teavm source checkout whose version catalog pins
+gdx-teavm 1.7.0 / TeaVM 0.16.0. The same checkout supplies the Gradle plugin
+and backend. Development validation uses JDK 21. The backend plugin owns
+JavaScript compilation, asset handling and generated HTML.
 
 Run from the repository root (use `gradlew.bat` on Windows):
 
 ```sh
-./gradlew -Pweb :web:compileKotlin
-./gradlew -Pweb :web:gdx_teavm_web_js_build
-./gradlew -Pweb :web:gdx_teavm_web_js_run
+./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:compileKotlin
+./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:gdx_teavm_web_js_build
+./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:gdx_teavm_web_js_run
 ./gradlew :tests:test --tests com.unciv.logic.files.SaveLocationTest
 ```
 
-For the local browser-backend and TeaVM classlib fixes used in the latest
-diagnostic run, pass both optional fork paths:
+To include the current TeaVM fork for compatibility work, add its source
+composite properties:
 
 ```sh
 ./gradlew -Pweb \
-  -PgdxTeaVMSource=C:/gits/gdx-teavm-unciv \
-  -PteavmCompatibilityJar=C:/gits/teavm-unciv/repro/build/compat/teavm-compatibility-0.15.0.jar \
+  -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 \
+  -PincludeTeaVMSource=true \
+  -PteavmPath=/path/to/teavm-0.16-fork \
   :web:gdx_teavm_web_js_build
 ```
 
 The expected web output directory is `web/build/dist/js/webapp`.
-Normal builds omit `-Pweb` and do not include the browser module.
+Normal builds omit `-Pweb` and do not include the browser module or alter the
+existing local Maven repository behavior.
 
 Verified so far:
 
 - Unchanged baseline `:core:compileKotlin`: passed.
-- Browser module `:web:classes`: passed, including the Kotlin JavaScript bridge.
-- `:web:dependencies --configuration teavm` with `-PgdxTeaVMSource=...`: resolved the 1.6.2 `backend-web` module to the local included build.
-- `:web:classes` with the local gdx-teavm source commit: passed, compiling `backend-shared` and `backend-web` as part of the composite build.
+- `:web:classes` passed with the source plugin/backend at gdx-teavm upstream
+  commit `5e3db3d630d92056f1de14b6f25b8ab84ad48976`.
+- The clean published TeaVM 0.16.0 baseline reported 48 unresolved symbols
+  (32 classes, 16 methods). Log and details are in
+  [COMPATIBILITY.md](COMPATIBILITY.md).
+- Source substitution with gdx-teavm commit
+  `19c58e88fd0b9fd8c7f8d710efbfa31bff4a9617` and TeaVM commit
+  `5c6b80cb6f9b8884cea99cfa9b063131992f10ab` completed JS analysis with 42
+  unresolved symbols (29 classes, 13 methods). The source build removed seven
+  baseline diagnostics and exposed one scheduled-executor gap. It did not
+  produce a validated browser game.
 - `SaveLocationTest`: 3 tests passed, including virtual file listing and all
   eight combinations of local/external save existence and storage preference.
 - Independent browser canvas smoke: Latin, Hebrew, Arabic, Vietnamese
@@ -83,50 +95,22 @@ On this Windows host the initial Kotlin daemon build failed deleting a locked
 output directory; retrying with `--no-daemon
 -Pkotlin.compiler.execution.strategy=in-process` passed.
 
-The first TeaVM generation attempt exceeded its default 1 GiB heap. With a
-4 GiB heap and the local 0.15 overlays above, JavaScript analysis completed but
-failed with 45 distinct missing-symbol diagnostics (29 classes, 16 methods).
-The TeaVM overlay resolved `AtomicReferenceArray`, `LockSupport`,
-`ThreadFactory`, and `RejectedExecutionException`; the backend overlay resolved
-`Pixmap(ByteBuffer)`. Executor shutdown now reaches a new missing
-`ScheduledThreadPoolExecutor` through `kotlinx.coroutines.internal.ConcurrentKt`
-and Unciv's dispatcher cleanup. See [COMPATIBILITY.md](COMPATIBILITY.md) for
-the captured log, baseline comparison, remaining symbols, and owning layers.
 No playable browser bundle has been produced or validated.
 Successful Kotlin compilation does not establish a working browser game.
 
-Those 0.15.0 results are historical. The latest tagged gdx-teavm release is
-1.6.2 and pins TeaVM 0.15.0, while current upstream gdx-teavm source at
-`5e3db3d630d92056f1de14b6f25b8ab84ad48976` pins TeaVM 0.16.0. The next clean
-compiler baseline must include that exact gdx source (backend and Gradle
-plugin) and use only published TeaVM 0.16.0 modules. The previous experimental
-`-PteavmClasslibJar` task-classpath replacement did not demonstrate that the
-forked classlib was used and is not a supported workaround.
+The earlier 0.15.0 overlay and task-level JAR replacement experiments are
+historical only. The JAR replacement did not demonstrate that the TeaVM fork
+classlib was actually used. Current fork validation uses Gradle composite
+dependency substitution instead; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Dependency work
 
-The TeaVM 0.15.0 local fork has separate commits for `AtomicReferenceArray`
-(`39ac18624`) and executor/parking support (`38d6266bd`). Its compatibility
-overlay JAR is generated by `./gradlew -p repro teavmCompatibilityJar` from
-`C:/gits/teavm-unciv`; the current artifact SHA-256 is
-`0DBBCF56964F7C235F1C7DB5D3BB26854AAFE29CA2C3F7B2AACEE0F37AB63AED`.
-The artifact excludes the pending TimeUnit implementation. The standalone
-AtomicReferenceArray contract passed against the JDK and generated JavaScript;
-the local overlay now resolves the atomic-array, LockSupport, and executor
-symbols observed on the initial TeaVM run. Remaining symbols include a
-`ScheduledThreadPoolExecutor` reference from coroutine dispatcher cleanup.
-These results do not establish Wasm/native correctness or complete coroutine
-compatibility.
-
-The gdx-teavm 1.6.2 local fork has a separately committed `Pixmap(ByteBuffer)`
-fix (`813eaa38`), with three passing tests for slice selection, position/limit
-preservation, bounds and direct-buffer rejection. It reuses the existing image
-decoder; browser image decoding has not been independently exercised.
-
-Neither local dependency fix is part of the pinned published artifacts. Use
-the explicit fork-build options documented in [COMPATIBILITY.md](COMPATIBILITY.md)
-when validating them. The default build remains pinned to published
-dependencies until those fixes are published and pinned.
+The current TeaVM fork is based on 0.16.0 and has passing standalone JVM and
+generated-JavaScript contracts for its class-library changes. Its source build
+is selected through `-PincludeTeaVMSource=true -PteavmPath=...`, not by adding
+an arbitrary JAR to a task classpath. The gdx-teavm Pixmap constructor fix is
+on the 0.16-compatible backend branch and its backend tests pass. These source
+changes remain experimental and are not published releases.
 
 ## Independently reviewable core fix
 
