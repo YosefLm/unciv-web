@@ -40,7 +40,7 @@ mods, file pickers, sound, and WebAssembly are separate follow-up stages.
 
 ## Validation status
 
-The opt-in module uses gdx-teavm 1.6.2 (TeaVM 0.15.0), libGDX 1.14.2,
+The initial opt-in module used gdx-teavm 1.6.2 (TeaVM 0.15.0), libGDX 1.14.2,
 Kotlin 2.4.20 and Java 17 bytecode. Development validation uses JDK 21.
 The backend's published Gradle plugin owns JavaScript compilation, assets and
 the generated HTML; there is no custom bundle postprocessor.
@@ -84,7 +84,7 @@ output directory; retrying with `--no-daemon
 -Pkotlin.compiler.execution.strategy=in-process` passed.
 
 The first TeaVM generation attempt exceeded its default 1 GiB heap. With a
-4 GiB heap and the two local overlays above, JavaScript analysis completed but
+4 GiB heap and the local 0.15 overlays above, JavaScript analysis completed but
 failed with 45 distinct missing-symbol diagnostics (29 classes, 16 methods).
 The TeaVM overlay resolved `AtomicReferenceArray`, `LockSupport`,
 `ThreadFactory`, and `RejectedExecutionException`; the backend overlay resolved
@@ -94,6 +94,14 @@ and Unciv's dispatcher cleanup. See [COMPATIBILITY.md](COMPATIBILITY.md) for
 the captured log, baseline comparison, remaining symbols, and owning layers.
 No playable browser bundle has been produced or validated.
 Successful Kotlin compilation does not establish a working browser game.
+
+Those 0.15.0 results are historical. The latest tagged gdx-teavm release is
+1.6.2 and pins TeaVM 0.15.0, while current upstream gdx-teavm source at
+`5e3db3d630d92056f1de14b6f25b8ab84ad48976` pins TeaVM 0.16.0. The next clean
+compiler baseline must include that exact gdx source (backend and Gradle
+plugin) and use only published TeaVM 0.16.0 modules. The previous experimental
+`-PteavmClasslibJar` task-classpath replacement did not demonstrate that the
+forked classlib was used and is not a supported workaround.
 
 ## Dependency work
 
