@@ -17,7 +17,11 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
             // A fully qualified type key in the packaged Skin.json.
             "com.unciv.ui.screens.pickerscreens.PromotionScreenColors",
             // Skin colors are ordinary JSON objects with r/g/b/a fields.
-            "com.badlogic.gdx.graphics.Color"
+            "com.badlogic.gdx.graphics.Color",
+            // Legacy viewport bounds persisted in Civilization.exploredRegion.
+            "com.badlogic.gdx.math.Vector2",
+            // Typed version parser used when loading a save fails.
+            "com.unciv.logic.GameInfoSerializationVersion"
     );
     private static final Set<String> REFLECTIVE_ENUMS = Set.of(
             "com.unciv.logic.map.mapgenerator.MapResourceSetting",

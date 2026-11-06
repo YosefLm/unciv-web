@@ -30,6 +30,24 @@ tasks.register<JavaExec>("jvmContract") {
     mainClass.set("validation.ReflectionFieldContract")
 }
 
+val generatedFixture = layout.buildDirectory.dir("generated/browser-save/java")
+val generateBrowserSaveFixture = tasks.register("generateBrowserSaveFixture") {
+    val input = file("src/main/resources/validation/browser-game-save.json")
+    inputs.file(input)
+    outputs.dir(generatedFixture)
+    doLast {
+        val escaped = input.readText().replace("\\", "\\\\")
+            .replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n")
+            .replace("\t", "\\t")
+        val output = generatedFixture.get().file("validation/BrowserSaveFixture.java").asFile
+        output.parentFile.mkdirs()
+        output.writeText("package validation; public final class BrowserSaveFixture { public static String text() { return \"" + escaped + "\"; } }")
+    }
+}
+sourceSets.main { java.srcDir(generatedFixture) }
+tasks.named("compileKotlin") { dependsOn(generateBrowserSaveFixture) }
+tasks.named("compileJava") { dependsOn(generateBrowserSaveFixture) }
+
 tasks.named<GenerateJavaScriptTask>("generateJavaScript") {
     val classlib = file(providers.gradleProperty("classlibJar").get())
     val core = file(providers.gradleProperty("coreJar").get())
