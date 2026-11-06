@@ -21,6 +21,7 @@ deployment status is tracked separately in PORTING.md.
 | WEB-012 | TeaVM regex | Language-picker labels use optional capture groups in replacement; unmatched group dereferenced. | Fixed fee13672c, initial and cached replacements; old-fails/new-passes regression. |
 | WEB-013 | web reflection policy | New-game texture access and resource/deprecation enumeration lack reflective members. | Fixed 2fe4533a9 and b8cee2bec; focused field/annotation fixtures and browser new game pass. |
 | WEB-014 | TeaVM optimizer | Full compilation fails on unreachable predecessor dominator and exception-entry loop motion. | Fixed f2de7ba8c/5757a02e8; compiler regressions and 217 core tests pass. |
+| WEB-016 | WebGL options / mod fonts | Open Options > Advanced: mod-font discovery called `WebFileHandle.file()`, which the browser backend explicitly does not support, crashing the tab. `WebFont` also ignores selected mod families and uses the browser sans stack. | Fixed in Unciv: omit mod-font discovery on WebGL while retaining native desktop/Android scanning. Full pinned `:web:preparePages` build passed with the Windows in-process TeaVM fallback; Options > Advanced browser verification pending. Browser font selection remains the standard sans stack. |
 
 ## Additional live observation
 
