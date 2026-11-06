@@ -64,14 +64,28 @@ composite properties:
   -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 \
   -PincludeTeaVMSource=true \
   -PteavmPath=/path/to/teavm-0.16-fork \
+  -PwebCompilerMemory=8192 \
   :web:gdx_teavm_web_js_build
 ```
 
 The expected web output directory is `web/build/dist/js/webapp`.
+`webCompilerMemory` sets the TeaVM worker heap in MB (default 4096). The current
+full-game analysis with JSON reflection metadata needs the 8192 MB setting above.
 Normal builds omit `-Pweb` and do not include the browser module or alter the
 existing local Maven repository behavior.
 
 Verified so far:
+
+- The full JavaScript build succeeds with TeaVM fork `5757a02e8` and gdx-teavm
+  fork `19c58e88fd0b9fd8c7f8d710efbfa31bff4a9617`, using the 8192 MB compiler heap.
+  The output bundle and assets are packaged; browser gameplay validation is still
+  pending. Earlier compiler checkpoints below are historical; see
+  [COMPATIBILITY.md](COMPATIBILITY.md) for current artifact hashes and the fixes.
+- All 217 TeaVM core tests pass, including regressions for dominator calculation
+  and loop motion across exceptional entries.
+- JVM and generated-JS JSON contracts pass for real Unciv settings, saves,
+  rulesets and skins. The focused Fetch contract passes UTF-8 streaming,
+  request/response cancellation, network errors and request timeout handling.
 
 - Unchanged baseline `:core:compileKotlin`: passed.
 - `:web:classes` passed with the source plugin/backend at gdx-teavm upstream
@@ -95,7 +109,7 @@ On this Windows host the initial Kotlin daemon build failed deleting a locked
 output directory; retrying with `--no-daemon
 -Pkotlin.compiler.execution.strategy=in-process` passed.
 
-No playable browser bundle has been produced or validated.
+The first browser launch of the compiled bundle stays on a black canvas; startup diagnostics are in progress. Menu, gameplay and persistence have not been validated.
 Successful Kotlin compilation does not establish a working browser game.
 
 The earlier 0.15.0 overlay and task-level JAR replacement experiments are
