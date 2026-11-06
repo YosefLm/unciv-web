@@ -6,6 +6,7 @@ import com.unciv.models.metadata.GameSettings
 import com.unciv.models.ruleset.Building
 import com.unciv.models.skins.SkinConfig
 import com.unciv.utils.ScreenOrientation
+import com.unciv.ui.screens.pickerscreens.PromotionScreenColors
 
 object JsonContract {
     @JvmStatic
@@ -54,6 +55,11 @@ object JsonContract {
         check(skin.baseColor.r == 0.25f && skin.baseColor.g == 0.5f)
         check(skin.skinVariants["Fixture"]?.image == "fixture-image")
         check(skin.skinVariants["Fixture"]?.alpha == 0.5f)
+        val promotionColors = json().fromJson(Any::class.java, """
+            {"class":"com.unciv.ui.screens.pickerscreens.PromotionScreenColors",
+             "selected":{"r":0.125,"g":0.25,"b":0.5,"a":1}}
+        """.trimIndent()) as PromotionScreenColors
+        check(promotionColors.selected.r == 0.125f && promotionColors.selected.b == 0.5f)
         println("Unciv JSON contract passed")
     }
 }
