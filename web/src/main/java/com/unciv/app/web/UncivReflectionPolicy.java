@@ -13,6 +13,8 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
             "com.unciv.ui.components.fonts.FontFamilyData",
             "com.unciv.logic.multiplayer.FriendList$Friend",
             "com.unciv.ui.screens.civilopediascreen.FormattedLine",
+            // A fully qualified type key in the packaged Skin.json.
+            "com.unciv.ui.screens.pickerscreens.PromotionScreenColors",
             // Skin colors are ordinary JSON objects with r/g/b/a fields.
             "com.badlogic.gdx.graphics.Color"
     );
