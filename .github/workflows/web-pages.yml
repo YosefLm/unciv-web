@@ -26,9 +26,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.1'
+          cache-read-only: false
       - name: Compile pinned browser distribution
         run: |
-          gradle -Pweb -PwebCompilerMemory=8192 :web:preparePages --no-daemon --console=plain -Pkotlin.compiler.execution.strategy=in-process
+          gradle -Pweb -PwebCompilerMemory=8192 "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1g" :web:preparePages --max-workers=2 --no-daemon --console=plain -Pkotlin.compiler.execution.strategy=in-process
       - name: Record deployed inputs
         run: |
           cp web/dependencies.lock.properties web/build/pages/game/dependencies.lock.properties
