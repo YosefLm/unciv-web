@@ -1,24 +1,28 @@
 # TeaVM and browser compatibility
 
 This page separates validated current results from earlier compiler and runtime
-checkpoints. A successful JavaScript compile and a browser gameplay run are
-distinct checks; the minimal gameplay/save/reload sequence now passes.
+checkpoints. The pinned public build, Pages deployment, and local gameplay/save
+checks have each been verified.
 
 ## Current validated results
 
 ### Full build and gameplay
 
-The latest completed full game build used Unciv `ac18ff19b`, TeaVM fork
-`fee13672c` based on TeaVM 0.16.0, and gdx-teavm fork `8444685af`. It completed
-in 4m 44s. Log:
-`web/build/diagnostics/teavm-js-0.16-preview-reflection-fix.log`.
+The latest public pinned `:web:preparePages` build completed in 6m 6s using
+TeaVM `9ce0ede26b7235a10b9143d6383d5866a400352c`, gdx-teavm
+`393993b8ea852f542d8025d4c7d34700a035421c`, and Unciv runtime commit
+`873ae6a2a`. The generated `app.js` SHA-256 is
+`7F8A912487CEFBE237B57A09F6D2D1231ADE9E8790E44A5AB4FEB5E2A2B4A4EB`.
+Yosef CI and Pages run `42190407113` succeeded; the live site's `SOURCE_COMMIT`
+reports `873ae6a2a`. Deployed source-map URLs return 404, as intended.
 
-The generated `web/build/dist/js/webapp/app.js` was 74,819,768 bytes with SHA-256
-`C458EC7A9F3C168F14EFAE59938350E5DA0FD804C9C427BF21AF8F833CC3C9D1`.
-The preceding bundle launched in headless Chrome with SwiftShader and passed this vanilla
-single-player path: English picker, main menu, Tiny Vanilla England new game,
-map display, Warrior move from MP 2 to 1, found London, select Animal
-Husbandry research, queue a Monument, and end turn 1. It also wrote a named save.
+Local headless Chrome with SwiftShader verified the English picker, main menu,
+Tiny Vanilla game creation, map display, unit movement, city founding, research
+and production selection, turn completion, and save/load. Extended play reached
+turn 6 with research and production completing. Overwriting the named save,
+reloading the page, and loading it again preserved turn 6. This is a local
+gameplay result; the Pages run establishes deployment, not the same extended
+playthrough.
 
 ### Save and reload validation
 
@@ -26,11 +30,10 @@ Unciv `f05dc7d08` adds targeted metadata for serialized `Vector2` fields and the
 `GameInfoSerializationVersion` fallback parser. JVM and generated-JavaScript
 contracts passed against the captured 44 KB save and a nonzero-coordinate variant.
 
-On the rebuilt bundle a fresh Tiny Vanilla game was created as Babylon, the city
-founded, Animal Husbandry selected, Monument queued, and turn 1 completed. The
-named save `revival-final-babylon-turn1` was written, the page reloaded, and that
-save loaded through the UI. The map, Babylon city, turn 1 / 3,940 BC, gold 3,
-research (5 turns remaining), and Monument (5 turns remaining) matched.
+An earlier captured-bundle check created a fresh Tiny Vanilla game as Babylon,
+founded a city, selected Animal Husbandry and Monument, completed turn 1, then
+reloaded and loaded the named save through the UI. The later extended check
+overwrote and reloaded a turn-6 save successfully.
 
 Read-only IndexedDB export confirms game ID
 `f700883a-ac70-41cf-b1b3-a45cf8e11e74`, 43,356 bytes, and explored-region bounds
@@ -47,44 +50,17 @@ formatting. The final full-app build passes (4m 44s); browser preview now displa
 Prince, turn 1, and Civ V - Vanilla correctly, and the game loads again. Evidence:
 `gameplay-02-preview-fixed.png`, `gameplay-03-verified-final-bundle.png`.
 
-Known backend limitation: `WebFileHandle.lastModified()` currently always returns
-zero, so the preview displays 1970 rather than the IndexedDB record date. Date
-display/sorting remains a follow-up; the named save and its actual contents persist.
+The timestamp persistence fix is included in the pinned backend and its browser
+contract passed. Save preview date sorting has not been separately stress-tested.
 
 ## Reproducing the web build
 
-The opt-in web module uses libGDX 1.14.2, Kotlin 2.4.20 and Java 17 bytecode.
-The tested gdx-teavm source fork pins plugin/backend 1.7.0 with TeaVM 0.16.0.
-Both source forks are required for web compilation and running. From the Unciv
-repository root, use the same arguments for compile, JavaScript build, and run:
-
-```powershell
-.\gradlew.bat -Pweb `
-  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
-  -PincludeTeaVMSource=true `
-  -PteavmPath=C:\gits\teavm-unciv `
-  -PwebCompilerMemory=8192 `
-  :web:compileKotlin
-
-.\gradlew.bat -Pweb `
-  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
-  -PincludeTeaVMSource=true `
-  -PteavmPath=C:\gits\teavm-unciv `
-  -PwebCompilerMemory=8192 `
-  :web:gdx_teavm_web_js_build
-
-.\gradlew.bat -Pweb `
-  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
-  -PincludeTeaVMSource=true `
-  -PteavmPath=C:\gits\teavm-unciv `
-  -PwebCompilerMemory=8192 `
-  :web:gdx_teavm_web_js_run
-```
-
-Replace those absolute paths with the local fork checkouts if they differ.
-`webCompilerMemory` is the TeaVM worker heap in MB; the full app currently needs
-8192 MB. Output is under `web/build/dist/js/webapp`. Avoid mixing TeaVM versions.
-Normal builds without `-Pweb` do not use these source composites.
+Use JDK 21 and `./gradlew -Pweb -PwebCompilerMemory=8192 :web:preparePages`.
+The main build downloads checksum-pinned public fork archives; see
+[BUILDING.md](BUILDING.md) and `dependencies.lock.properties`. Explicit source
+checkout overrides remain available for development, but are not required.
+The public package excludes debug maps and source trees to avoid exposing build
+machine paths. Normal builds without `-Pweb` do not bootstrap these dependencies.
 
 ## Current compatibility changes
 
@@ -110,10 +86,10 @@ Normal builds without `-Pweb` do not use these source composites.
   TeaVM. Focused tests cover UTF-8 streaming, status/headers, error bodies,
   network rejection, request and response cancellation, and request timeout.
 
-These source changes are local forks, not published upstream releases. Keep
+These source changes are pinned public forks, not upstream releases. Keep
 compiler/backend/classlib artifacts paired to the same fork revisions when
-reproducing results; source substitution is configured with the two source
-properties above, not by adding an arbitrary replacement JAR to a task.
+reproducing results. The normal opt-in path verifies pinned public archives;
+local source overrides are documented in `BUILDING.md`.
 
 ## Additional validation evidence
 
