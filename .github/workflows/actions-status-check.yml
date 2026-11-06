@@ -1,0 +1,12 @@
+name: Actions availability check
+on:
+  push:
+    branches: [codex/actions-status-check]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "Actions runner is available"
