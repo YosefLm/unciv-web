@@ -21,6 +21,19 @@ dependencies {
     implementation(rootProject.libs.kotlin.reflect)
     implementation(rootProject.libs.gdx)
     implementation(rootProject.libs.coroutines.core)
+    compileOnly("org.teavm:teavm-extension-spi:0.16.0")
+}
+
+val validationClasspath = layout.buildDirectory.file("validation/runtime-classpath.txt")
+tasks.register("writeValidationClasspath") {
+    dependsOn(tasks.named("classes"))
+    inputs.files(sourceSets.main.get().runtimeClasspath)
+    outputs.file(validationClasspath)
+    doLast {
+        val output = validationClasspath.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(sourceSets.main.get().runtimeClasspath.files.joinToString("\n") { it.absolutePath })
+    }
 }
 
 gdxTeaVM {
