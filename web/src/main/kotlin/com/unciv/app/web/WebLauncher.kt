@@ -20,6 +20,12 @@ object WebLauncher {
             storagePrefix = "unciv"
             localStoragePrefix = "unciv"
         }
-        WebApplication(UncivGame(), config)
+        WebApplication(WebUncivGame(), config)
     }
+}
+
+private class WebUncivGame : UncivGame() {
+    override val supportsOnlineMultiplayer = false
+
+    override fun getGcCount(): Int? = null
 }

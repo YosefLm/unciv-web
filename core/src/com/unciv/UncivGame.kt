@@ -55,6 +55,7 @@ import kotlin.reflect.KClass
  *  - contains references to [the game being played][gameInfo], and high-level UI elements.
  */
 open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpecific {
+    override open val supportsOnlineMultiplayer: Boolean = true
 
     var deepLinkedMultiplayerGame: String? = null
     override var customDataDirectory: String? = null
@@ -123,7 +124,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
 
         onlineMultiplayer = Multiplayer()
 
-        Concurrency.run {
+        if (supportsOnlineMultiplayer) Concurrency.run {
             // Check if the server is available in case the feature set has changed
             try {
                 onlineMultiplayer.multiplayerServer.checkServerStatus()
@@ -199,6 +200,9 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
      * @param autoPlay pass in the old WorldScreen AutoPlay to retain the state throughout turns. Otherwise leave it is the default.
      */
     suspend fun loadGame(newGameInfo: GameInfo, autoPlay: AutoPlay = AutoPlay(settings.autoPlay), callFromLoadScreen: Boolean = false): WorldScreen = withThreadPoolContext toplevel@{
+        if (newGameInfo.gameParameters.isOnlineMultiplayer && !supportsOnlineMultiplayer)
+            throw UncivShowableException("Online multiplayer is unavailable in this browser preview.")
+
         val prevGameInfo = gameInfo
         gameInfo = newGameInfo
 
@@ -497,7 +501,7 @@ private fun logRunningThreads() {
         pushScreen(onScreenCreated) { MainMenuScreen() }
     }
 
-    override fun getGcCount(): Int = ManagementFactory.getGarbageCollectorMXBeans().sumOf { it.collectionCount }.toInt()
+    override fun getGcCount(): Int? = ManagementFactory.getGarbageCollectorMXBeans().sumOf { it.collectionCount }.toInt()
 
     companion object {
         //region AUTOMATICALLY GENERATED VERSION DATA - DO NOT CHANGE THIS REGION, INCLUDING THIS COMMENT
