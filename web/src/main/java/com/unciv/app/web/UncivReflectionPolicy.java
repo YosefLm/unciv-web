@@ -31,6 +31,11 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
                         && !Modifier.isTransient(field.modifiers()))
                 .reflectableMethods(UncivReflectionPolicy::isDefaultConstructor);
 
+        // TextureData.getReadonlyPixmap() reads this libGDX implementation detail on the
+        // new-game screen; expose only the field it asks for via Class.getDeclaredField().
+        selectClasses(type -> "com.badlogic.gdx.graphics.glutils.FileTextureData".equals(type.name()))
+                .reflectableFields(field -> "pixmap".equals(field.name()));
+
         // JSON collection construction and Json.Serializable implementations need constructors,
         // but their internal fields and arbitrary methods do not need reflective access.
         var collection = extending("java.util.Collection");
