@@ -1,8 +1,9 @@
 # FileTextureData reflection contract
 
-This fixture reproduces the reflective access used by `TextureData.getReadonlyPixmap()`
-on Unciv's new-game screen. It checks declared-field lookup, accessibility, and
-read/write access using the production `UncivReflectionPolicy` service.
+This fixture reproduces reflective access used by `TextureData.getReadonlyPixmap()`
+and new-game resource options. It checks the pixmap field read/write path, enum
+constant lookup, deprecated constant annotations, and `MapResourceSetting`'s
+filtered labels using the production `UncivReflectionPolicy` service.
 
 Export the web module's resolved runtime classpath first:
 

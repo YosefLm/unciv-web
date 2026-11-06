@@ -3,6 +3,7 @@ package com.unciv.app.web;
 import com.github.xpenatan.gdx.teavm.backends.shared.config.reflection.GdxReflectionHelper;
 import java.lang.reflect.Modifier;
 import java.util.Set;
+import org.teavm.extension.introspect.IntrospectField;
 import org.teavm.extension.introspect.IntrospectMethod;
 import org.teavm.extension.spi.reflection.SimpleReflectionPolicy;
 
@@ -17,6 +18,12 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
             "com.unciv.ui.screens.pickerscreens.PromotionScreenColors",
             // Skin colors are ordinary JSON objects with r/g/b/a fields.
             "com.badlogic.gdx.graphics.Color"
+    );
+    private static final Set<String> REFLECTIVE_ENUMS = Set.of(
+            "com.unciv.logic.map.mapgenerator.MapResourceSetting",
+            "com.unciv.models.ruleset.unique.Countables",
+            "com.unciv.models.ruleset.unique.DeprecatedUniqueType",
+            "com.unciv.models.ruleset.unique.UniqueType"
     );
 
     @Override
@@ -35,6 +42,10 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
         // new-game screen; expose only the field it asks for via Class.getDeclaredField().
         selectClasses(type -> "com.badlogic.gdx.graphics.glutils.FileTextureData".equals(type.name()))
                 .reflectableFields(field -> "pixmap".equals(field.name()));
+
+        // These enum helpers call Class.getField(name) to inspect constant annotations.
+        selectClasses(type -> REFLECTIVE_ENUMS.contains(type.name()))
+                .reflectableFields(IntrospectField::isEnumConstant);
 
         // JSON collection construction and Json.Serializable implementations need constructors,
         // but their internal fields and arbitrary methods do not need reflective access.

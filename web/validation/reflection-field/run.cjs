@@ -1,19 +1,19 @@
 let passed = false;
 const timeout = setTimeout(() => {
-    console.error("Unciv FileTextureData reflection contract timed out");
+    console.error("Unciv reflection contract timed out");
     process.exit(2);
 }, 15000);
 const originalInfo = console.info;
 console.info = (...args) => {
     originalInfo(...args);
-    if (args.join(" ") === "Unciv FileTextureData.pixmap reflection contract passed") passed = true;
+    if (args.join(" ") === "Unciv reflective field contract passed") passed = true;
 };
 try {
     const runtime = require("./build/generated/teavm/js/unciv-reflection-field-validation.js");
     runtime.main([], error => {
         clearTimeout(timeout);
         if (error || !passed) {
-            console.error(error || "Unciv FileTextureData reflection contract did not reach success marker");
+            console.error(error || "Unciv reflection contract did not reach success marker");
             process.exitCode = 1;
         }
     });
