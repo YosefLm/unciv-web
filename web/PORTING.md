@@ -1,135 +1,117 @@
 # Browser port revival
 
-## Baseline and scope
+## Current status
 
-This integration starts from Unciv `608d9de26` (upstream master fetched November 5,
-2026), not from the old web fork. Reference implementation:
-[PR #14709](https://github.com/yairm210/Unciv/pull/14709), head
-`92b9f9b64fd2ae39484b9a5bf44f0cc8cd362b1a`. Upstream has 1,070 commits since
-the shared ancestor `fff82fd49f832e2a87f7d9a9d1bce15ff5115eb0`.
+The browser build runs vanilla single-player in headless Chrome with SwiftShader.
+Verified: English picker, menu, Tiny Vanilla new game, map, unit movement, founding
+a city, choosing research and production, ending a turn, saving, reloading the
+page, and loading the named save. The final fresh Babylon game retained turn 1,
+gold 3, Animal Husbandry research, Monument production and the same map after
+reload. Its exported save contains nonzero explored-region coordinates.
 
-The first gameplay target is vanilla single-player in a browser: launch, create
-a game, display the map, move a unit, end a turn, and save/reload. Multiplayer,
-mods, file pickers, sound, and WebAssembly are separate follow-up stages.
+The save-list preview required two additional reflection registrations. The
+generated-JavaScript regression and final browser preview/load check both pass.
+The backend still reports zero file modification time, so save dates show 1970;
+this does not prevent loading, but date display/sorting needs follow-up.
 
-## Implementation sequence
+The full JavaScript bundle was built from Unciv `ac18ff19b`, TeaVM fork
+`fee13672c` (TeaVM 0.16.0 based), and gdx-teavm fork `8444685af`. The compiler
+log is `web/build/diagnostics/teavm-js-0.16-preview-reflection-fix.log` (4m 44s).
+The generated `app.js` is 74,819,768 bytes, SHA-256
+`C458EC7A9F3C168F14EFAE59938350E5DA0FD804C9C427BF21AF8F833CC3C9D1`.
+Exact build details and prior checkpoints are in
+[COMPATIBILITY.md](COMPATIBILITY.md).
 
-1. Add an opt-in web build with pinned dependencies, using current Unciv's
-   Kotlin and libGDX versions. Establish the unchanged core build baseline.
-2. Adapt the old launcher and browser font/display integration to current APIs.
-   Keep normal Unciv initialization and disposal behavior.
-3. Compile to JavaScript and reduce compatibility failures to reproductions.
-   Fix generic JVM/class-library issues in TeaVM; fix libGDX browser behavior
-   in gdx-teavm. Maintain a local TeaVM fork when an upstream fix is needed.
-4. Add only demonstrated Unciv platform seams. Explain each core change and
-   validate its desktop behavior. Do not shadow whole game subsystems.
-5. Validate the actual browser gameplay sequence above, including persistence
-   and JSON round trips. Split the resulting changes by owning layer for review.
+Baseline: Unciv `608d9de26b16f834d5fed19df4fd1bd65bfcbf3e`; old
+[PR #14709](https://github.com/yairm210/Unciv/pull/14709) is the reference.
+The shared ancestor has 1,070 intervening upstream commits. Core changes are
+14 files, 88 added lines and 27 removed lines; most implementation is in the
+opt-in web module and the two dependency forks.
 
-## Constraints from the previous implementation
+## Scope and constraints
 
-- No mutable dependency snapshots or implicit local Maven overrides.
-- No test source trees or counterfeit JUnit/Hamcrest classes in production.
-- No synchronous coroutine dispatcher masquerading as a thread pool.
-- No blanket startup retries, swallowed initialization errors, or disposal
-  overrides that bypass normal cleanup.
-- Register serialization reflection metadata from actual requirements; do not
-  transplant the old giant preservation list without validation.
-- Keep Java-only bridge code limited to demonstrated interop requirements;
-  prefer Kotlin for the launcher and integration.
+The first gameplay target is vanilla single-player in a browser. Multiplayer,
+mods, sound, and WebAssembly remain separate follow-up stages. Named save writing and loading after a page reload are demonstrated.
 
-## Validation status
+- Keep web support opt-in; normal builds must not acquire local source overrides.
+- Use current Unciv APIs and preserve ordinary initialization and disposal.
+- Fix reusable JVM/API gaps in TeaVM and browser behavior in gdx-teavm. Keep
+  Unciv-specific changes narrow and tied to demonstrated platform needs.
+- Do not use mutable snapshots, counterfeit test classes in production, fake
+  synchronous coroutine dispatchers, blanket retries, or swallowed startup errors.
+- Add reflection metadata from actual JSON and runtime use, not a broad package
+  preservation list.
 
-The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and Java 17 bytecode.
-gdx-teavm 1.6.2 is the latest tagged release and pins TeaVM 0.15.0, so web
-builds require a gdx-teavm source checkout whose version catalog pins
-gdx-teavm 1.7.0 / TeaVM 0.16.0. The same checkout supplies the Gradle plugin
-and backend. Development validation uses JDK 21. The backend plugin owns
-JavaScript compilation, asset handling and generated HTML.
+## Build and run
 
-Run from the repository root (use `gradlew.bat` on Windows):
+The opt-in module targets libGDX 1.14.2, Kotlin 2.4.20 and Java 17 bytecode.
+The tested plugin/backend source fork pins gdx-teavm 1.7.0 with TeaVM 0.16.0.
+Both source forks are required for web build and run tasks. From the repository
+root, substitute the local absolute paths as needed:
 
-```sh
-./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:compileKotlin
-./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:gdx_teavm_web_js_build
-./gradlew -Pweb -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 :web:gdx_teavm_web_js_run
-./gradlew :tests:test --tests com.unciv.logic.files.SaveLocationTest
-```
+```powershell
+.\gradlew.bat -Pweb `
+  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
+  -PincludeTeaVMSource=true `
+  -PteavmPath=C:\gits\teavm-unciv `
+  -PwebCompilerMemory=8192 `
+  :web:compileKotlin
 
-To include the current TeaVM fork for compatibility work, add its source
-composite properties:
-
-```sh
-./gradlew -Pweb \
-  -PgdxTeaVMSource=/path/to/gdx-teavm-0.16 \
-  -PincludeTeaVMSource=true \
-  -PteavmPath=/path/to/teavm-0.16-fork \
-  -PwebCompilerMemory=8192 \
+.\gradlew.bat -Pweb `
+  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
+  -PincludeTeaVMSource=true `
+  -PteavmPath=C:\gits\teavm-unciv `
+  -PwebCompilerMemory=8192 `
   :web:gdx_teavm_web_js_build
+
+.\gradlew.bat -Pweb `
+  -PgdxTeaVMSource=C:\gits\gdx-teavm-unciv `
+  -PincludeTeaVMSource=true `
+  -PteavmPath=C:\gits\teavm-unciv `
+  -PwebCompilerMemory=8192 `
+  :web:gdx_teavm_web_js_run
 ```
 
-The expected web output directory is `web/build/dist/js/webapp`.
-`webCompilerMemory` sets the TeaVM worker heap in MB (default 4096). The current
-full-game analysis with JSON reflection metadata needs the 8192 MB setting above.
-Normal builds omit `-Pweb` and do not include the browser module or alter the
-existing local Maven repository behavior.
+`webCompilerMemory` is the TeaVM worker heap size in MB. The full game currently
+needs 8192 MB for compilation. The expected output is
+`web/build/dist/js/webapp`. Do not combine TeaVM versions. Normal builds omit
+`-Pweb` and keep existing plugin repository behavior.
 
-Verified so far:
+## Validation boundaries
 
-- The full JavaScript build succeeds with TeaVM fork `5757a02e8` and gdx-teavm
-  fork `19c58e88fd0b9fd8c7f8d710efbfa31bff4a9617`, using the 8192 MB compiler heap.
-  The output bundle and assets are packaged; browser gameplay validation is still
-  pending. Earlier compiler checkpoints below are historical; see
-  [COMPATIBILITY.md](COMPATIBILITY.md) for current artifact hashes and the fixes.
-- All 217 TeaVM core tests pass, including regressions for dominator calculation
-  and loop motion across exceptional entries.
-- JVM and generated-JS JSON contracts pass for real Unciv settings, saves,
-  rulesets and skins. The focused Fetch contract passes UTF-8 streaming,
-  request/response cancellation, network errors and request timeout handling.
+- The current full compiler build and browser sequence above pass.
+- The browser test demonstrates one turn and a named save/load across page reload.
+  It does not establish long-game stability or support across browsers.
+- JVM and generated-JavaScript JSON contracts, TeaVM core tests, Fetch contracts,
+  executor/input suspension, reflection, and browser runtime regressions are
+  recorded in [COMPATIBILITY.md](COMPATIBILITY.md).
+- Successful compilation alone does not establish gameplay. Conversely, the
+  current browser run proves the listed path only; it does not claim multiplayer,
+  arbitrary mods, or broad compatibility.
 
-- Unchanged baseline `:core:compileKotlin`: passed.
-- `:web:classes` passed with the source plugin/backend at gdx-teavm upstream
-  commit `5e3db3d630d92056f1de14b6f25b8ab84ad48976`.
-- The clean published TeaVM 0.16.0 baseline reported 48 unresolved symbols
-  (32 classes, 16 methods). Log and details are in
-  [COMPATIBILITY.md](COMPATIBILITY.md).
-- Source substitution with gdx-teavm commit
-  `19c58e88fd0b9fd8c7f8d710efbfa31bff4a9617` and TeaVM commit
-  `5c6b80cb6f9b8884cea99cfa9b063131992f10ab` completed JS analysis with 42
-  unresolved symbols (29 classes, 13 methods). The source build removed seven
-  baseline diagnostics and exposed one scheduled-executor gap. It did not
-  produce a validated browser game.
-- `SaveLocationTest`: 3 tests passed, including virtual file listing and all
-  eight combinations of local/external save existence and storage preference.
-- Independent browser canvas smoke: Latin, Hebrew, Arabic, Vietnamese
-  diacritics, emoji and descenders produced visible glyphs within the shared
-  font bounds. This checks the bridge script, not the compiled game.
+## Review and follow-up sequence
 
-On this Windows host the initial Kotlin daemon build failed deleting a locked
-output directory; retrying with `--no-daemon
--Pkotlin.compiler.execution.strategy=in-process` passed.
+The implementation is split locally by owning repository. Review reusable TeaVM
+changes first (class-library contracts and optimizer regressions), then the three
+gdx-teavm fixes (Pixmap buffer semantics, render callback suspension, queued input).
+Review Unciv's save-path/platform seams separately from the opt-in web module,
+launcher, Fetch engine and reflection registrations. Local commits preserve those
+boundaries; no remote branch or pull request has been published.
 
-The first browser launch of the compiled bundle stays on a black canvas; startup diagnostics are in progress. Menu, gameplay and persistence have not been validated.
-Successful Kotlin compilation does not establish a working browser game.
+The local branches are `codex/web-revival` (this worktree),
+`codex/unciv-teavm-0.16` (`C:/gits/teavm-unciv`) and
+`codex/pixmap-teavm-0.16` (`C:/gits/gdx-teavm-unciv`). The shared agent workflow is
+`C:/Users/yosef/.codex/skills/unciv-teavm-port/SKILL.md`.
 
-The earlier 0.15.0 overlay and task-level JAR replacement experiments are
-historical only. The JAR replacement did not demonstrate that the TeaVM fork
-classlib was actually used. Current fork validation uses Gradle composite
-dependency substitution instead; see [COMPATIBILITY.md](COMPATIBILITY.md).
+Before broad release, validate longer games, browser lifecycle/backgrounding,
+more browsers and hardware, and bundle size/performance. Multiplayer, mods,
+file sharing, audio and WebAssembly need separate implementation/validation.
+The current milestone is the observed minimal vanilla gameplay path.
 
-## Dependency work
+## Historical work
 
-The current TeaVM fork is based on 0.16.0 and has passing standalone JVM and
-generated-JavaScript contracts for its class-library changes. Its source build
-is selected through `-PincludeTeaVMSource=true -PteavmPath=...`, not by adding
-an arbitrary JAR to a task classpath. The gdx-teavm Pixmap constructor fix is
-on the 0.16-compatible backend branch and its backend tests pass. These source
-changes remain experimental and are not published releases.
-
-## Independently reviewable core fix
-
-Save lookup now checks `Files.isExternalStorageAvailable` before requesting an
-external handle, and logs the chosen handle's path without demanding a native
-`java.io.File`. The browser backend explicitly rejects both external handles
-and conversion to native files. Selection rules for available external storage
-are unchanged and covered by `SaveLocationTest`.
+The old PR #14709 implementation is a reference, not the base of this port. The
+revival starts from current Unciv upstream and preserves the useful split between
+game changes, browser backend changes, and reusable TeaVM fixes. Earlier 0.15
+diagnostics, intermediate 0.16 compiler failures, and resolved startup/runtime
+errors are retained as historical evidence in [COMPATIBILITY.md](COMPATIBILITY.md).

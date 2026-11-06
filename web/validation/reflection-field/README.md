@@ -8,8 +8,9 @@ filtered labels using the production `UncivReflectionPolicy` service.
 It also loads `browser-game-save.json`, a 44 KB save exported from an actual
 headless browser run (Tiny map, Civ V - Vanilla, turn 1, England, game ID
 `e914aa79-84c1-4900-88ea-dde6432882bd`). The fixture reads the full `GameInfo`,
-checks its nonzero legacy `Vector2` bounds, then verifies JSON write/read-back
-preserves them.
+then inserts nonzero legacy `Vector2` bounds into a variant of that payload and
+verifies JSON write/read-back preserves them. The captured original predates the
+coordinate metadata fix and contains empty bounds.
 
 To reproduce the save-picker's `LoadOrSaveScreen.showSaveInfo` path, the fixture
 also reads the same full save as `GameInfoPreview`, calls `migrateCivID`, filters
