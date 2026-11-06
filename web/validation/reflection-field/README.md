@@ -5,13 +5,21 @@ and new-game resource options. It checks the pixmap field read/write path, enum
 constant lookup, deprecated constant annotations, and `MapResourceSetting`'s
 filtered labels using the production `UncivReflectionPolicy` service.
 
-It also loads `browser-game-save.json`, a 44 KB save exported from the actual
+It also loads `browser-game-save.json`, a 44 KB save exported from an actual
 headless browser run (Tiny map, Civ V - Vanilla, turn 1, England, game ID
-`e914aa79-84c1-4900-88ea-dde6432882bd`). That earlier web writer emitted empty
-`Vector2` bounds. The fixture first reads the captured save unchanged, then
-inserts nonzero values into England's `exploredRegion` in memory and verifies
-JSON read, write, and read-back preserve them. A build task embeds the tracked JSON
-as a generated Java string so this test does not depend on browser resource loading.
+`e914aa79-84c1-4900-88ea-dde6432882bd`). The fixture reads the full `GameInfo`,
+checks its nonzero legacy `Vector2` bounds, then verifies JSON write/read-back
+preserves them.
+
+To reproduce the save-picker's `LoadOrSaveScreen.showSaveInfo` path, the fixture
+also reads the same full save as `GameInfoPreview`, calls `migrateCivID`, filters
+human player civilizations and their labels, reads game parameters, and formats
+a `Date`. Before the targeted metadata rule, generated JavaScript failed with
+`Class cannot be created (missing no-arg constructor): com.unciv.logic.GameInfoPreview`.
+The production policy now lists both `GameInfoPreview` and its nested
+`CivilizationInfoPreview` explicitly rather than widening the general policy.
+A build task embeds the tracked JSON as a generated Java string, so the test does
+not depend on browser resource loading.
 
 Export the web module's resolved runtime classpath first:
 

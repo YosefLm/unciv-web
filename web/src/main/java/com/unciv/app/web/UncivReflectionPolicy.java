@@ -21,7 +21,10 @@ public final class UncivReflectionPolicy extends SimpleReflectionPolicy {
             // Legacy viewport bounds persisted in Civilization.exploredRegion.
             "com.badlogic.gdx.math.Vector2",
             // Typed version parser used when loading a save fails.
-            "com.unciv.logic.GameInfoSerializationVersion"
+            "com.unciv.logic.GameInfoSerializationVersion",
+            // Save picker reads this compact view from the full save JSON.
+            "com.unciv.logic.GameInfoPreview",
+            "com.unciv.logic.civilization.CivilizationInfoPreview"
     );
     private static final Set<String> REFLECTIVE_ENUMS = Set.of(
             "com.unciv.logic.map.mapgenerator.MapResourceSetting",

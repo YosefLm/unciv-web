@@ -4,11 +4,15 @@ import com.badlogic.gdx.graphics.glutils.FileTextureData
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.JsonReader
 import com.unciv.json.json
+import com.unciv.logic.BackwardCompatibility.migrateCivID
 import com.unciv.logic.GameInfo
+import com.unciv.logic.GameInfoPreview
 import com.unciv.logic.map.mapgenerator.MapResourceSetting
 import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.DeprecatedUniqueType
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.ui.components.extensions.UncivDateFormat.formatDate
+import java.util.Date
 
 object ReflectionFieldContract {
     @JvmStatic
@@ -30,6 +34,18 @@ object ReflectionFieldContract {
         val browserSave = BrowserSaveFixture.text()
         val versionOnly = json().fromJson(com.unciv.logic.GameInfoSerializationVersion::class.java, browserSave)
         check(versionOnly.version.number == 4)
+
+        // Mirrors LoadOrSaveScreen.showSaveInfo: parse its lightweight view, apply
+        // the civilization ID migration, build player labels, and format save time.
+        val preview = json().fromJson(GameInfoPreview::class.java, browserSave)
+        preview.migrateCivID()
+        check(preview.turns == 1 && preview.currentPlayer == "England")
+        val playerCivs = preview.civilizations.filter { it.isPlayerCivilization() }
+        check(playerCivs.map { it.civName } == listOf("England"))
+        check(playerCivs.single().civID == "England")
+        check(Date(1_793_937_871_176L).formatDate().isNotBlank())
+        check(preview.gameParameters.mods.isEmpty())
+
         val originalGame = json().fromJson(GameInfo::class.java, browserSave)
         check(originalGame.turns == 1 && originalGame.currentPlayer == "England")
         val originalEngland = originalGame.civilizations.first { it.civID == "England" }
