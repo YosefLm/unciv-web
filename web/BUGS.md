@@ -22,6 +22,14 @@ deployment status is tracked separately in PORTING.md.
 | WEB-013 | web reflection policy | New-game texture access and resource/deprecation enumeration lack reflective members. | Fixed 2fe4533a9 and b8cee2bec; focused field/annotation fixtures and browser new game pass. |
 | WEB-014 | TeaVM optimizer | Full compilation fails on unreachable predecessor dominator and exception-entry loop motion. | Fixed f2de7ba8c/5757a02e8; compiler regressions and 217 core tests pass. |
 
+## Additional live observation
+
+WEB-015 (unconfirmed, owner not yet isolated): on the deployed runtime 873ae6a2a,
+a fresh Russia Quickstart at turn 0 displayed happiness 12 before saving and 0
+after page reload and loading the named save. The map and units loaded, with no
+page errors. Compare the same no-city save on desktop, inspect transient-stat
+recalculation, and test after founding a city before classifying this as a port
+regression or upstream game issue. This observation is not a demonstrated fix.
 ## Required validation, not yet established support
 
 - Multiplayer: server compatibility, CORS, HTTPS/WSS, authentication, two-player turn exchange, reconnection and persistence.
