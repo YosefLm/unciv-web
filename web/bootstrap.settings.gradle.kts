@@ -29,6 +29,9 @@ settings.includeBuild(gdxSource.absolutePath) {
 val teavmSource = resolveWebToolchain("teavm", providers.gradleProperty("teavmPath").orNull)
 settings.includeBuild(teavmSource.absolutePath) {
     dependencySubstitution {
+        substitute(module("org.teavm:teavm-gradle-plugin")).using(project(":tools:gradle"))
+        substitute(module("org.teavm:teavm-extension-spi")).using(project(":extension:spi"))
+        substitute(module("org.teavm:teavm-extension-annotation-processor")).using(project(":extension:processor"))
         substitute(module("org.teavm:teavm-tooling")).using(project(":tools:core"))
         substitute(module("org.teavm:teavm-core")).using(project(":core"))
         substitute(module("org.teavm:teavm-classlib")).using(project(":classlib"))
@@ -47,7 +50,9 @@ private fun resolveWebToolchain(name: String, overridePath: String?): File {
     val lockFile = File(settings.settingsDir, "web/dependencies.lock.properties")
     if (!lockFile.isFile) throw GradleException("Missing pinned web toolchain lock file: $lockFile")
     val pins = Properties().also { lockFile.inputStream().use(it::load) }
-    val expectedVersion = pins.required("$name.version")
+    val expectedVersion = if (name == "teavm" && overridePath != null) {
+        providers.gradleProperty("teavmVersion").orNull ?: pins.required("$name.version")
+    } else pins.required("$name.version")
     if (overridePath != null) return validateLocalWebToolchain(name, overridePath, expectedVersion)
 
     val commit = pins.required("$name.commit")

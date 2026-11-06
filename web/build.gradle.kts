@@ -25,7 +25,7 @@ dependencies {
     implementation(rootProject.libs.kotlin.reflect)
     implementation(rootProject.libs.gdx)
     implementation(rootProject.libs.coroutines.core)
-    compileOnly("org.teavm:teavm-extension-spi:0.16.0")
+    compileOnly("org.teavm:teavm-extension-spi:0.17.0")
 }
 
 configurations.configureEach {
@@ -104,6 +104,8 @@ gdxTeaVM {
         mainClass.set("com.unciv.app.web.WebLauncher")
         htmlTitle.set("Unciv")
         processMemory.set(providers.gradleProperty("webCompilerMemory").map(String::toInt).orElse(4096))
+        outOfProcess.set(providers.gradleProperty("webCompilerInProcess")
+            .map(String::toBooleanStrict).map { !it }.orElse(true))
     }
 
     js {

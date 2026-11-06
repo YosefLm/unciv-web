@@ -5,6 +5,7 @@ pluginManagement {
     val webEnabled = providers.gradleProperty("web").isPresent
     repositories {
         if (!webEnabled) mavenLocal() // Preserve the existing JVM/Android plugin workflow.
+        mavenCentral()
         gradlePluginPortal() // So other plugins can be resolved
     }
 }
