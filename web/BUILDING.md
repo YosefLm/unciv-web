@@ -60,3 +60,14 @@ path. An omitted override continues to use the pinned downloaded archive.
 
 Overrides are checked for the pinned plugin/backend and TeaVM version pairing.
 The normal build does not read these properties.
+
+When testing a TeaVM source checkout with a newer project version, also pass
+`-PteavmVersion=0.17.0`. This changes the local source validation only; downloaded
+builds continue to use the lock file. The source composite includes TeaVM's
+matching Gradle plugin, reflection SPI, and annotation processor so tooling and
+compiler APIs agree.
+
+If the TeaVM worker command exceeds Windows' command length limit, use
+`-PwebCompilerInProcess=true` and give the Gradle daemon the compiler heap through
+`org.gradle.jvmargs`. The `webCompilerMemory` setting applies to a separate
+worker and does not set the heap for in-process compilation.
