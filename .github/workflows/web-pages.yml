@@ -1,0 +1,55 @@
+name: Browser build and GitHub Pages
+on:
+  push:
+    branches: ["codex/web-revival"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: unciv-web-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'haimlm/unciv-web' || github.repository == 'YosefLm/unciv-web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: published-site
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile pinned browser distribution
+        run: |
+          chmod +x gradlew
+          ./gradlew -Pweb -PwebCompilerMemory=8192 :web:preparePages --no-daemon --console=plain -Pkotlin.compiler.execution.strategy=in-process
+      - name: Record deployed inputs
+        run: |
+          cp web/dependencies.lock.properties web/build/pages/game/dependencies.lock.properties
+          git rev-parse HEAD > web/build/pages/game/SOURCE_COMMIT
+          touch web/build/pages/game/.nojekyll
+      - name: Update game while preserving existing documentation
+        run: |
+          mkdir -p published-site/game
+          rsync -a --delete web/build/pages/game/ published-site/game/
+          touch published-site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: published-site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
