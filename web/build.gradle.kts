@@ -24,6 +24,11 @@ dependencies {
     compileOnly("org.teavm:teavm-extension-spi:0.16.0")
 }
 
+configurations.configureEach {
+    exclude(group = "io.ktor", module = "ktor-client-cio")
+    exclude(group = "io.ktor", module = "ktor-client-cio-jvm")
+}
+
 val validationClasspath = layout.buildDirectory.file("validation/runtime-classpath.txt")
 tasks.register("writeValidationClasspath") {
     dependsOn(tasks.named("classes"))
@@ -42,7 +47,7 @@ gdxTeaVM {
     webDefaults {
         mainClass.set("com.unciv.app.web.WebLauncher")
         htmlTitle.set("Unciv")
-        processMemory.set(4096)
+        processMemory.set(providers.gradleProperty("webCompilerMemory").map(String::toInt).orElse(4096))
     }
 
     js {
