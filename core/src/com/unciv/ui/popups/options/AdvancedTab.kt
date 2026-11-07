@@ -168,10 +168,11 @@ internal class AdvancedTab(
             // Add default font
             emit(FontFamilyData.default)
             // List mod fonts
-            // WebFont uses the browser's standard font stack and cannot load mod font files.
-            if (Gdx.app.type != Application.ApplicationType.WebGL &&
-                (Gdx.app.type != Application.ApplicationType.Android || Gdx.app.version >= 26))
-                emitAll(ModFonts.scan(UncivGame.Current.files.getModsFolder()))
+            val modsFolder = UncivGame.Current.files.getModsFolder()
+            when {
+                Gdx.app.type == Application.ApplicationType.WebGL -> emitAll(ModFonts.scanWithFileHandles(modsFolder))
+                Gdx.app.type != Application.ApplicationType.Android || Gdx.app.version >= 26 -> emitAll(ModFonts.scan(modsFolder))
+            }
             // Add system fonts
             for (font in Fonts.getSystemFonts())
                 emit(font)

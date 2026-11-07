@@ -21,7 +21,7 @@ deployment status is tracked separately in PORTING.md.
 | WEB-012 | TeaVM regex | Language-picker labels use optional capture groups in replacement; unmatched group dereferenced. | Fixed fee13672c, initial and cached replacements; old-fails/new-passes regression. |
 | WEB-013 | web reflection policy | New-game texture access and resource/deprecation enumeration lack reflective members. | Fixed 2fe4533a9 and b8cee2bec; focused field/annotation fixtures and browser new game pass. |
 | WEB-014 | TeaVM optimizer | Full compilation fails on unreachable predecessor dominator and exception-entry loop motion. | Fixed f2de7ba8c/5757a02e8; compiler regressions and 217 core tests pass. |
-| WEB-016 | WebGL options / mod fonts | Open Options > Advanced: mod-font discovery called `WebFileHandle.file()`, which the browser backend explicitly does not support, crashing the tab. `WebFont` also ignores selected mod families and uses the browser sans stack. | Fixed in Unciv: omit mod-font discovery on WebGL while retaining native desktop/Android scanning. Full pinned `:web:preparePages` build passed with the Windows in-process TeaVM fallback; Options > Advanced browser verification pending. Browser font selection remains the standard sans stack. |
+| WEB-016 | WebGL options / mod fonts | Open Options > Advanced: mod-font discovery called `WebFileHandle.file()`, which the browser backend explicitly does not support, crashing the tab. `WebFont` also ignored selected mod families and always used the browser sans stack. | Fixed: WebGL discovery uses virtual `FileHandle` traversal; selected font bytes load through the browser Font Loading API, with invalid files falling back to the sans stack. `ModFontsTest`, focused Chrome contract, generated-game integration, and full pinned `:web:preparePages` build passed. |
 
 ## Additional live observation
 
@@ -36,7 +36,7 @@ regression or upstream game issue. This observation is not a demonstrated fix.
 - Multiplayer: server compatibility, CORS, HTTPS/WSS, authentication, two-player turn exchange, reconnection and persistence.
 - Longer games: combat, later AI turns, and late-game serialization. Local testing has reached turn 6, completed research/production, and verified save overwrite/reload at turn 6.
 - Browser lifecycle/input: visibility, resize, focus, touch, suspended callbacks, and bounded disposal.
-- Mods, file import/export/sharing, audio, WebAssembly, mobile browsers and performance remain separate work until tested.
+- Arbitrary mod behavior beyond font discovery/rendering, file import/export/sharing, audio, WebAssembly, mobile browsers and performance remain separate work until tested. WEB-016 validates mod-font discovery and loading in the browser fixture.
 - Continue recording exact Unciv and dependency commits in CI artifacts; the current Pages deployment was verified against runtime commit 873ae6a2a.
 
 ## Reporting discipline

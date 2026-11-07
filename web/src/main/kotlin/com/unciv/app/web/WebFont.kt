@@ -5,27 +5,65 @@ import com.unciv.ui.components.fonts.FontFamilyData
 import com.unciv.ui.components.fonts.FontImplementation
 import com.unciv.ui.components.fonts.FontMetricsCommon
 import com.unciv.ui.components.fonts.Fonts
+import com.unciv.UncivGame
+import com.unciv.utils.Log
+import org.teavm.jso.JSObject
 
 class WebFont : FontImplementation {
     private var fontSize = Fonts.ORIGINAL_FONT_SIZE.toInt()
-    private val fontFamily = "Arial, Helvetica, sans-serif"
+    private var fontFamily = "Arial, Helvetica, sans-serif"
+    private var nextCustomFamilyId = 0
+    private var activeFontPath: String? = null
+    private var activeCustomFont: RegisteredFont? = null
     private lateinit var metrics: FontMetricsCommon
+
+    private data class RegisteredFont(val familyName: String, val face: JSObject)
 
     override fun setFontFamily(fontFamilyData: FontFamilyData, size: Int) {
         require(size > 0) { "Font size must be positive" }
+        val path = fontFamilyData.filePath
+        var newFont: RegisteredFont? = null
+        val selectedFont = path?.let { filePath ->
+            try {
+                val bytes = UncivGame.Current.files.getLocalFile(filePath).readBytes()
+                RegisteredFont(
+                    "UncivModFont${++nextCustomFamilyId}",
+                    WebFontRasterizer.registerFont(bytes, "UncivModFont$nextCustomFamilyId")
+                ).also { newFont = it }
+            } catch (ex: Exception) {
+                Log.error("Failed to load mod font $filePath; using the browser sans font", ex)
+                null
+            }
+        }
+        val candidateFamily = selectedFont?.let { "'${it.familyName}', Arial, Helvetica, sans-serif" }
+            ?: "Arial, Helvetica, sans-serif"
+
+        val candidateMetrics = try {
+            val measured = WebFontRasterizer.measureMetrics(size, candidateFamily)
+            check(measured.size == 4) { "Canvas font metrics returned ${measured.size} values; expected 4" }
+            FontMetricsCommon(
+                ascent = measured[0],
+                descent = measured[1],
+                height = measured[2],
+                leading = measured[3],
+            ).also { metrics ->
+                check(metrics.ascent.isFinite() && metrics.descent.isFinite() &&
+                    metrics.height.isFinite() && metrics.leading.isFinite() && metrics.height > 0f
+                ) { "Canvas font metrics were invalid: ${measured.contentToString()}" }
+            }
+        } catch (ex: Exception) {
+            newFont?.let { WebFontRasterizer.removeFont(it.face) }
+            throw ex
+        }
+
+        if (newFont != null || path != activeFontPath || selectedFont == null) {
+            activeCustomFont?.let { WebFontRasterizer.removeFont(it.face) }
+            activeCustomFont = newFont
+            activeFontPath = if (selectedFont == null) null else path
+        }
         fontSize = size
-        // The requested family is platform-specific; use the browser's standard sans stack.
-        val measured = WebFontRasterizer.measureMetrics(fontSize, fontFamily)
-        check(measured.size == 4) { "Canvas font metrics returned ${measured.size} values; expected 4" }
-        metrics = FontMetricsCommon(
-            ascent = measured[0],
-            descent = measured[1],
-            height = measured[2],
-            leading = measured[3],
-        )
-        check(metrics.ascent.isFinite() && metrics.descent.isFinite() &&
-            metrics.height.isFinite() && metrics.leading.isFinite() && metrics.height > 0f
-        ) { "Canvas font metrics were invalid: ${measured.contentToString()}" }
+        fontFamily = candidateFamily
+        metrics = candidateMetrics
     }
 
     override fun getFontSize(): Int = fontSize

@@ -1,9 +1,33 @@
 package com.unciv.app.web
 
 import org.teavm.jso.JSBody
+import org.teavm.jso.JSObject
 
-/** Canvas-backed glyph rasterization for the browser's system font stack. */
+/** Canvas-backed glyph rasterization for browser fonts. */
 object WebFontRasterizer {
+    @JvmStatic
+    @JSBody(params = ["bytes", "familyName"], script = """
+        const root = typeof window !== 'undefined' ? window : globalThis;
+        if (!root.document || typeof root.FontFace !== 'function')
+            throw new Error('Custom font loading requires the CSS Font Loading API');
+        const face = new root.FontFace(familyName, new Uint8Array(bytes).buffer);
+        if (face.status !== 'loaded') {
+            // Consume the rejected loaded promise for invalid binary data.
+            face.load().catch(() => {});
+            throw new Error('Browser did not synchronously load the supplied font data');
+        }
+        root.document.fonts.add(face);
+        return face;
+    """)
+    external fun registerFont(bytes: ByteArray, familyName: String): JSObject
+
+    @JvmStatic
+    @JSBody(params = ["face"], script = """
+        const root = typeof window !== 'undefined' ? window : globalThis;
+        if (root.document && root.document.fonts) root.document.fonts.delete(face);
+    """)
+    external fun removeFont(face: JSObject)
+
     @JvmStatic
     @JSBody(
         params = ["fontSize", "fontFamily"],
