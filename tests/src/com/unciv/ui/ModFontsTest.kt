@@ -11,6 +11,33 @@ import java.nio.file.Files
 
 class ModFontsTest {
     @Test
+    fun `native scan retains filename invariant and relative file path`() = runBlocking {
+        val root = Files.createTempDirectory("unciv-native-mod-fonts-").toFile()
+        try {
+            for (modName in listOf("Example", "Other")) {
+                val fonts = root.resolve("mods/$modName/fonts")
+                fonts.mkdirs()
+                fonts.resolve("Display.ttf").writeBytes(byteArrayOf(1))
+            }
+
+            val found = ModFonts.scan(FileHandle(root.resolve("mods")))
+                .toList(mutableListOf())
+                .map { Triple(it.localName, it.invariantName, it.filePath) }
+                .sortedBy { it.first }
+
+            assertEquals(
+                listOf(
+                    Triple("Display (Example)", "Display", "mods/Example/fonts/Display.ttf"),
+                    Triple("Display (Other)", "Display", "mods/Other/fonts/Display.ttf"),
+                ),
+                found
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `file handle scan finds supported mod fonts without java file access`() = runBlocking {
         val root = Files.createTempDirectory("unciv-mod-fonts-").toFile()
         try {

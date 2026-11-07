@@ -44,6 +44,31 @@ mods, sound, and WebAssembly remain separate follow-up stages. Named save writin
 - Add reflection metadata from actual JSON and runtime use, not a broad package
   preservation list.
 
+### Local files and Java NIO
+
+`WebFileHandle.file()` is deliberately unsupported for browser handles in the
+pinned gdx-teavm backend (`393993b8ea852f542d8025d4c7d34700a035421c`;
+[WebFileHandle.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFileHandle.java)).
+Its `Local` files live in the backend's LocalDB/IndexedDB storage ([WebFiles.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFiles.java),
+[LocalDBStorage.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/filesystem/types/LocalDBStorage.java));
+reads and directory operations go through `WebFileHandle` rather than a host
+filesystem. TeaVM's current pinned `java.io.File` and NIO implementation
+(`1568dd92f24c60319fd88281eb5d3af301525616`, version 0.17.0; [TFile.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/classlib/src/main/java/org/teavm/classlib/java/io/TFile.java),
+[TDefaultFileSystemProvider.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/classlib/src/main/java/org/teavm/classlib/java/nio/file/impl/TDefaultFileSystemProvider.java),
+[VirtualFileSystemProvider.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/core/src/main/java/org/teavm/runtime/fs/VirtualFileSystemProvider.java))
+uses `VirtualFileSystemProvider`, which defaults to an independent in-memory
+filesystem. It is not wired to gdx-teavm LocalDB, so returning a path from
+`WebFileHandle.file()` alone would make NIO inspect the wrong store.
+
+For mod fonts ([ModFonts.kt](../core/src/com/unciv/ui/components/fonts/ModFonts.kt)), keep the
+existing NIO scanner on desktop and supported Android, and use the equivalent
+`FileHandle.list/isDirectory/exists` operations on WebGL. This keeps the
+platform-specific boundary at the caller that requires NIO. A reusable
+`java.io.File`/NIO view of LocalDB could be built in gdx-teavm,
+but it would require a VirtualFileSystem adapter with explicit path, storage,
+and persistence semantics; that broader filesystem integration is separate
+from the font-scanning fix.
+
 ## Build and run
 
 The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and TeaVM 0.16.0.

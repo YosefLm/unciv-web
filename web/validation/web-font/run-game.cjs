@@ -40,9 +40,14 @@ async function main() {
         page.on('requestfailed', request => failedRequests.push({ url: request.url(), error: request.failure()?.errorText }));
         await page.addInitScript(() => {
             window.__uncivFontMeasureFamilies = [];
+            window.__uncivFontUnhandledRejections = [];
+            window.addEventListener('unhandledrejection', event => {
+                window.__uncivFontUnhandledRejections.push(String(event.reason));
+                event.preventDefault();
+            });
             const original = CanvasRenderingContext2D.prototype.measureText;
             CanvasRenderingContext2D.prototype.measureText = function (text) {
-                window.__uncivFontMeasureFamilies.push(this.font);
+                window.__uncivFontMeasureFamilies.push({ font: this.font, text: String(text) });
                 return original.call(this, text);
             };
         });
@@ -107,17 +112,60 @@ async function main() {
                 status: face.status,
                 customAdvance,
                 fallbackAdvance,
-                appUsedCustomFamily: window.__uncivFontMeasureFamilies.some(font => font.includes(face.family)),
-                localStorageKeys: Object.keys(localStorage),
+                appUsedCustomFamily: window.__uncivFontMeasureFamilies.some(call => call.font.includes(face.family)),
+                unhandledRejections: [...window.__uncivFontUnhandledRejections],
             };
         });
         assert(result.status === 'loaded', `FontFace status was ${result.status}`);
         assert(result.appUsedCustomFamily, 'The generated Unciv app did not measure glyphs with its selected custom family');
         assert(result.customAdvance !== result.fallbackAdvance,
             `Custom font advance matched fallback (${result.customAdvance})`);
+        assert(result.unhandledRejections.length === 0,
+            `Valid custom font produced unhandled rejections: ${result.unhandledRejections.join('; ')}`);
         assert(pageErrors.length === 0, `Generated app page errors: ${pageErrors.join('; ')}`);
-        console.log(JSON.stringify({ result, pageErrors, failedRequests }, null, 2));
-        console.log('Generated Unciv custom font integration passed');
+
+        await page.evaluate(async () => {
+            const db = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('unciv', 1);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            try {
+                const transaction = db.transaction('FILE_DATA', 'readwrite');
+                transaction.objectStore('FILE_DATA').put({
+                    type: 2,
+                    date: new Date(),
+                    contents: new Int8Array([0, 1, 2, 3]),
+                }, '/mods/FontFixture/fonts/Distinctive.ttf/');
+                await new Promise((resolve, reject) => {
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                    transaction.onabort = () => reject(transaction.error || new Error('Malformed font update aborted'));
+                });
+            } finally {
+                db.close();
+            }
+        });
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
+        await page.waitForFunction(() => window.__uncivFontMeasureFamilies.some(call =>
+            call.text.includes('Hgjpqy') && call.font.includes('Arial, Helvetica, sans-serif')),
+        null, { timeout: 120000 });
+        await page.waitForTimeout(500);
+        const malformedResult = await page.evaluate(() => ({
+            registeredCustomFaces: Array.from(document.fonts || []).filter(face => face.family.includes('UncivModFont'))
+                .map(face => ({ family: face.family, status: face.status })),
+            usedFallback: window.__uncivFontMeasureFamilies.some(call =>
+                call.text.includes('Hgjpqy') && call.font.includes('Arial, Helvetica, sans-serif')),
+            unhandledRejections: [...window.__uncivFontUnhandledRejections],
+        }));
+        assert(malformedResult.registeredCustomFaces.length === 0,
+            `Malformed custom font left a registered face: ${JSON.stringify(malformedResult.registeredCustomFaces)}`);
+        assert(malformedResult.usedFallback, 'Malformed custom font did not fall back to browser sans during Kotlin startup');
+        assert(malformedResult.unhandledRejections.length === 0,
+            `Malformed custom font produced unhandled rejections: ${malformedResult.unhandledRejections.join('; ')}`);
+        assert(pageErrors.length === 0, `Generated app page errors: ${pageErrors.join('; ')}`);
+        console.log(JSON.stringify({ result, malformedResult, pageErrors, failedRequests }, null, 2));
+        console.log('Generated Unciv valid and malformed font integration passed');
     } finally {
         await context.close();
     }
