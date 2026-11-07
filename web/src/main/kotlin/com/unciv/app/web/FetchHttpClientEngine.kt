@@ -85,8 +85,12 @@ private class FetchHttpClientEngine(private val engineConfig: HttpClientEngineCo
             throw FetchRequestException("Fetch failed for ${data.method.value} ${data.url}", t)
         }
 
+        val statusCode = FetchJsBridge.responseStatus(response)
+        val stream = FetchJsBridge.responseBody(response)
+        val responseHasBody = stream != null && data.method.value != "HEAD" &&
+            statusCode !in setOf(204, 205, 304)
         val headers = HeadersBuilder()
-        val headerPairs = FetchJsBridge.responseHeaders(response)
+        val headerPairs = FetchJsBridge.responseHeaders(response, responseHasBody)
         for (index in 0 until headerPairs.length) {
             val pair = headerPairs.get(index)
             headers.append(pair.get(0).stringValue(), pair.get(1).stringValue())
@@ -94,7 +98,6 @@ private class FetchHttpClientEngine(private val engineConfig: HttpClientEngineCo
 
         val bodyChannel = ByteChannel(autoFlush = true)
         val responseBody: ByteReadChannel
-        val stream = FetchJsBridge.responseBody(response)
         if (stream == null) {
             bodyChannel.close()
             responseBody = bodyChannel
@@ -124,7 +127,7 @@ private class FetchHttpClientEngine(private val engineConfig: HttpClientEngineCo
         }
 
         return HttpResponseData(
-            HttpStatusCode(FetchJsBridge.responseStatus(response), FetchJsBridge.responseStatusText(response)),
+            HttpStatusCode(statusCode, FetchJsBridge.responseStatusText(response)),
             GMTDate(),
             headers.build(),
             HttpProtocolVersion.HTTP_1_1,
@@ -238,8 +241,30 @@ internal object FetchJsBridge {
     external fun responseBody(response: JSObject): ReadableStream?
 
     @JvmStatic
-    @JSBody(params = ["response"], script = "return Array.from(response.headers.entries());")
-    external fun responseHeaders(response: JSObject): JSArrayReader<JSArray<JSString>>
+    @JSBody(params = ["response", "hasBody"], script = """
+        const headers = Array.from(response.headers.entries());
+        if (!hasBody) return headers;
+
+        const contentEncoding = response.headers.get('Content-Encoding');
+        const codings = contentEncoding == null
+            ? []
+            : contentEncoding.split(',').map(coding => coding.trim().toLowerCase()).filter(Boolean);
+        // Fetch decodes these codings before exposing Response.body. Unknown codings stay
+        // untouched so another Ktor layer can still handle them when supported.
+        const fetchDecodedCodings = new Set(['gzip', 'x-gzip', 'deflate', 'br', 'zstd']);
+        const nonIdentityCodings = codings.filter(coding => coding !== 'identity');
+        const hasNonIdentityCoding = nonIdentityCodings.length > 0;
+        const decodedByFetch = hasNonIdentityCoding &&
+            nonIdentityCodings.every(coding => fetchDecodedCodings.has(coding));
+        const sameOrigin = response.type === 'basic';
+        return headers.filter(pair => {
+            const lowerName = pair[0].toLowerCase();
+            if (lowerName === 'content-length' && (!sameOrigin || hasNonIdentityCoding)) return false;
+            if (lowerName === 'content-encoding' && decodedByFetch) return false;
+            return true;
+        });
+    """)
+    external fun responseHeaders(response: JSObject, hasBody: Boolean): JSArrayReader<JSArray<JSString>>
 }
 
 private class FetchRequestException(message: String, cause: Throwable) : RuntimeException(message, cause)

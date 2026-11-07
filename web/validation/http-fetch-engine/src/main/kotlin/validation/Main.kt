@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
+import io.ktor.client.request.head
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -51,8 +52,30 @@ fun main(args: Array<String>) {
             }
             check(response.status == HttpStatusCode(207, "Multi-Status")) { "status was ${response.status}" }
             check(response.headers["X-Fetch-Probe"] == "streamed") { "response header missing" }
+            check(response.headers["Content-Length"] == "${"streamed café 🧭 response body".encodeToByteArray().size}") {
+                "same-origin Content-Length should be preserved"
+            }
             check(response.bodyAsText() == "streamed café 🧭 response body") { "streamed body mismatch" }
             println("Fetch GET response passed")
+
+            // Fetch transparently decompresses response bodies while Content-Length can still
+            // describe the compressed wire representation (and Content-Encoding may be hidden by CORS).
+            val decodedBody = "x".repeat(1775)
+            val decodedResponse = client.get("https://fixture.invalid/compressed-body")
+            check(decodedResponse.bodyAsText() == decodedBody) { "decoded response body was truncated or rejected" }
+            println("Fetch decoded body with wire Content-Length passed")
+
+            val headResponse = client.head("https://fixture.invalid/head")
+            check(headResponse.headers["Content-Length"] == "123") { "HEAD Content-Length was not preserved" }
+            check(headResponse.headers["Content-Encoding"] == "x-custom") { "HEAD Content-Encoding was not preserved" }
+            check(headResponse.bodyAsText().isEmpty()) { "HEAD response unexpectedly had body bytes" }
+            println("Fetch HEAD metadata passed")
+            val noContentResponse = client.get("https://fixture.invalid/no-content")
+            check(noContentResponse.status == HttpStatusCode.NoContent) { "204 status was ${noContentResponse.status}" }
+            check(noContentResponse.headers["Content-Length"] == null) { "204 unexpectedly exposed Content-Length" }
+            check(noContentResponse.headers["X-Metadata"] == "kept") { "204 metadata was not preserved" }
+            check(noContentResponse.bodyAsText().isEmpty()) { "204 response unexpectedly had body bytes" }
+            println("Fetch bodyless status metadata passed")
 
             val postResponse = client.post("https://fixture.invalid/post") {
                 setBody("request café 🧭")

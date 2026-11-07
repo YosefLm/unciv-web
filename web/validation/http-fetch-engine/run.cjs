@@ -28,11 +28,46 @@ global.fetch = async (url, options) => {
                 controller.close();
             }
         });
-        return new Response(body, {
+        const response = new Response(body, {
             status: 207,
             statusText: "Multi-Status",
-            headers: { "X-Fetch-Probe": "streamed" }
+            headers: {
+                "X-Fetch-Probe": "streamed",
+                "Content-Length": String(new TextEncoder().encode("streamed café 🧭 response body").length)
+            }
         });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+    }
+    if (url.endsWith("/compressed-body")) {
+        // Model the Fetch-visible response: body has already been decompressed, while
+        // the CORS-visible Content-Length is the smaller compressed wire size.
+        const response = new Response("x".repeat(1775), {
+            status: 200,
+            headers: { "Content-Length": "347" }
+        });
+        Object.defineProperty(response, "type", { value: "cors" });
+        return response;
+    }
+    if (url.endsWith("/head")) {
+        const response = new Response(null, {
+            status: 200,
+            headers: { "Content-Length": "123", "Content-Encoding": "x-custom" }
+        });
+        Object.defineProperty(response, "type", { value: "basic" });
+        // Chromium can expose an empty ReadableStream for HEAD. Exercise the engine's
+        // request-method guard even when Fetch supplies a stream object.
+        Object.defineProperty(response, "body", { value: new ReadableStream({ start(controller) { controller.close(); } }) });
+        return response;
+    }
+    if (url.endsWith("/no-content")) {
+        const response = new Response(null, {
+            status: 204,
+            headers: { "X-Metadata": "kept" }
+        });
+        Object.defineProperty(response, "type", { value: "basic" });
+        Object.defineProperty(response, "body", { value: new ReadableStream({ start(controller) { controller.close(); } }) });
+        return response;
     }
     if (url.endsWith("/post")) {
         postedBody = new TextDecoder().decode(options.body);
@@ -103,7 +138,14 @@ process.on("uncaughtException", error => {
     runtimeFailure = error?.stack ?? String(error);
 });
 
-const runtime = require("./build/generated/teavm/js/unciv-fetch-engine-validation.js");
+let runtime;
+try {
+    runtime = require("./build/generated/teavm/js/unciv-fetch-engine-validation.js");
+} catch (error) {
+    clearTimeout(timeout);
+    console.error("Fetch engine contract failed while loading generated JavaScript", error?.stack ?? error);
+    process.exit(1);
+}
 if (typeof runtime.main !== "function") throw new Error("TeaVM Fetch entry point was not generated");
 runtime.main(cancellationRepro ? ["--cancel-repro"] : (skipCancellation ? ["--skip-cancel"] : []), error => {
     if (error) {
