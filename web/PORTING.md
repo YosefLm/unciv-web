@@ -13,14 +13,16 @@ generated-JavaScript regression and final browser preview/load check both pass.
 The save timestamp persistence fix is included in the deployed backend; its
 write/reload contract passed. Save-date sorting has not been stress-tested.
 
-The public pinned `:web:preparePages` build passed in 6m 6s with TeaVM
-`9ce0ede26b7235a10b9143d6383d5866a400352c`, gdx-teavm
-`393993b8ea852f542d8025d4c7d34700a035421c`, and Unciv runtime commit
-`873ae6a2a`. Its generated `app.js` SHA-256 is
-`7F8A912487CEFBE237B57A09F6D2D1231ADE9E8790E44A5AB4FEB5E2A2B4A4EB`.
-Yosef CI and Pages run `42190407113` succeeded, and the live site's
-`SOURCE_COMMIT` reports `873ae6a2a`. Deployed source-map URLs return 404 as
-intended. A live Chrome check also passed English selection, Quickstart, named save, page reload, and save preview with a current 2026 timestamp.
+The public pinned `:web:preparePages` build passed on 2026-11-08 in 5m 41s with
+TeaVM `16bc89b1e31e3c3e09ab6bfe4f26c430be910b13`, gdx-teavm
+`d2df1013d297a848734e9928c6bfd508ab053657`, and Unciv runtime commit
+`e80f7330a2175141bfe84387b95ceb5ba0b9912e`. Its generated `app.js` SHA-256 is
+`69BC78688843FCE1D70A4878AF2AE4A2C79D1D377794DF2ADDF4ADDE51865EFE`, matching
+the artifact before the dependency-owner migration. The earlier Yosef CI and
+Pages run `42190407113` deployed runtime `873ae6a2a`; it remains the live-site
+evidence until this newer build is deployed. Deployed source-map URLs returned
+404 as intended. A live Chrome check also passed English selection, Quickstart,
+named save, page reload, and save preview with a current 2026 timestamp.
 Exact build details and prior checkpoints are in
 [COMPATIBILITY.md](COMPATIBILITY.md).
 
@@ -47,15 +49,15 @@ mods, sound, and WebAssembly remain separate follow-up stages. Named save writin
 ### Local files and Java NIO
 
 `WebFileHandle.file()` is deliberately unsupported for browser handles in the
-pinned gdx-teavm backend (`393993b8ea852f542d8025d4c7d34700a035421c`;
-[WebFileHandle.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFileHandle.java)).
-Its `Local` files live in the backend's LocalDB/IndexedDB storage ([WebFiles.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFiles.java),
-[LocalDBStorage.java](https://github.com/haimlm/gdx-teavm/blob/393993b8ea852f542d8025d4c7d34700a035421c/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/filesystem/types/LocalDBStorage.java));
+pinned gdx-teavm backend (`d2df1013d297a848734e9928c6bfd508ab053657`;
+[WebFileHandle.java](https://github.com/YosefLm/gdx-teavm/blob/d2df1013d297a848734e9928c6bfd508ab053657/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFileHandle.java)).
+Its `Local` files live in the backend's LocalDB/IndexedDB storage ([WebFiles.java](https://github.com/YosefLm/gdx-teavm/blob/d2df1013d297a848734e9928c6bfd508ab053657/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/WebFiles.java),
+[LocalDBStorage.java](https://github.com/YosefLm/gdx-teavm/blob/d2df1013d297a848734e9928c6bfd508ab053657/backends/backend-web/src/main/java/com/github/xpenatan/gdx/teavm/backends/web/filesystem/types/LocalDBStorage.java));
 reads and directory operations go through `WebFileHandle` rather than a host
 filesystem. TeaVM's current pinned `java.io.File` and NIO implementation
-(`1568dd92f24c60319fd88281eb5d3af301525616`, version 0.17.0; [TFile.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/classlib/src/main/java/org/teavm/classlib/java/io/TFile.java),
-[TDefaultFileSystemProvider.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/classlib/src/main/java/org/teavm/classlib/java/nio/file/impl/TDefaultFileSystemProvider.java),
-[VirtualFileSystemProvider.java](https://github.com/haimlm/teavm/blob/1568dd92f24c60319fd88281eb5d3af301525616/core/src/main/java/org/teavm/runtime/fs/VirtualFileSystemProvider.java))
+(`16bc89b1e31e3c3e09ab6bfe4f26c430be910b13`, version 0.17.0; [TFile.java](https://github.com/YosefLm/teavm/blob/16bc89b1e31e3c3e09ab6bfe4f26c430be910b13/classlib/src/main/java/org/teavm/classlib/java/io/TFile.java),
+[TDefaultFileSystemProvider.java](https://github.com/YosefLm/teavm/blob/16bc89b1e31e3c3e09ab6bfe4f26c430be910b13/classlib/src/main/java/org/teavm/classlib/java/nio/file/impl/TDefaultFileSystemProvider.java),
+[VirtualFileSystemProvider.java](https://github.com/YosefLm/teavm/blob/16bc89b1e31e3c3e09ab6bfe4f26c430be910b13/core/src/main/java/org/teavm/runtime/fs/VirtualFileSystemProvider.java))
 uses `VirtualFileSystemProvider`, which defaults to an independent in-memory
 filesystem. It is not wired to gdx-teavm LocalDB, so returning a path from
 `WebFileHandle.file()` alone would make NIO inspect the wrong store.
@@ -71,9 +73,9 @@ from the font-scanning fix.
 
 ## Build and run
 
-The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and TeaVM 0.16.0.
-The public forks are [haimlm/teavm](https://github.com/haimlm/teavm) and
-[haimlm/gdx-teavm](https://github.com/haimlm/gdx-teavm). Exact source commits and
+The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and TeaVM 0.17.0.
+The public forks are [YosefLm/teavm](https://github.com/YosefLm/teavm) and
+[YosefLm/gdx-teavm](https://github.com/YosefLm/gdx-teavm). Exact source commits and
 archive SHA-256 values are in `web/dependencies.lock.properties`.
 
 ```sh
