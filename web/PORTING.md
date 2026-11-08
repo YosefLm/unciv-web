@@ -14,8 +14,8 @@ The save timestamp persistence fix is included in the deployed backend; its
 write/reload contract passed. Save-date sorting has not been stress-tested.
 
 The public pinned `:web:preparePages` build passed in 6m 6s with TeaVM
-`9ce0ede26b7235a10b9143d6383d5866a400352c`, gdx-teavm
-`393993b8ea852f542d8025d4c7d34700a035421c`, and Unciv runtime commit
+`ec3d26da3898ee1d8b6f07c1a33b9d2fc2172f73`, gdx-teavm
+`a3d640b6e18768974ab6fb862c5d58713402496e`, and Unciv runtime commit
 `873ae6a2a`. Its generated `app.js` SHA-256 is
 `7F8A912487CEFBE237B57A09F6D2D1231ADE9E8790E44A5AB4FEB5E2A2B4A4EB`.
 Yosef CI and Pages run `42190407113` succeeded, and the live site's
@@ -47,8 +47,8 @@ mods, sound, and WebAssembly remain separate follow-up stages. Named save writin
 ## Build and run
 
 The opt-in module uses libGDX 1.14.2, Kotlin 2.4.20 and TeaVM 0.16.0.
-The public forks are [haimlm/teavm](https://github.com/haimlm/teavm) and
-[haimlm/gdx-teavm](https://github.com/haimlm/gdx-teavm). Exact source commits and
+The public forks are [YosefLm/teavm](https://github.com/YosefLm/teavm) and
+[YosefLm/gdx-teavm](https://github.com/YosefLm/gdx-teavm). Exact source commits and
 archive SHA-256 values are in `web/dependencies.lock.properties`.
 
 ```sh

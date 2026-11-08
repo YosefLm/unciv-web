@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.repository == 'haimlm/unciv-web' || github.repository == 'YosefLm/unciv-web'
+    if: github.repository == 'YosefLm/unciv-web'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
