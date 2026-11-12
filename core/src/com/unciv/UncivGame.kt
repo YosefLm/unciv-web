@@ -59,6 +59,11 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
 
     open val multiplayerStorage: PlatformMultiplayerStorage? get() = null
 
+    open fun openMultiplayer(onReady: () -> Unit, onError: (String) -> Unit) {
+        if (supportsOnlineMultiplayer) onReady()
+        else onError("Online multiplayer is unavailable in the browser preview.")
+    }
+
     var deepLinkedMultiplayerGame: String? = null
     override var customDataDirectory: String? = null
 
